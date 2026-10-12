@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}Analysis History & Reports - Pediatric AI{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+        <div>
+            <h2>📜 Analysis History & Clinical Reports</h2>
+            <p style="color: var(--text-muted); font-size: 0.9rem;">View past audio screening sessions, inspect results, and download PDF / CSV reports</p>
+        </div>
+        <div>
+            <a href="/api/report/csv" class="btn btn-secondary">📊 Download Full CSV Export</a>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <table>
+        <thead>
+            <tr>
+                <th>Date & Time</th>
+                <th>Input Mode</th>
+                <th>Filename</th>
+                <th>Detected Sound</th>
+                <th>Acoustic Screening Pattern</th>
+                <th>Confidence</th>
+                <th>Risk Level</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="tblHistoryBody">
+            <tr>
+                <td colspan="8" style="text-align: center; color: var(--text-muted);">Loading analysis history...</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/history.js') }}"></script>
+{% endblock %}

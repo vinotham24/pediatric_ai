@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}Upload Audio File - Pediatric AI{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>📁 Upload Pediatric Audio File</h2>
+    <p style="color: var(--text-muted); font-size: 0.95rem; margin-top: 0.3rem;">The AI model automatically detects whether the audio is a <strong>Infant Cry</strong> or <strong>Pediatric Cough</strong> and performs deep disease & pain screening.</p>
+</div>
+
+<form id="uploadForm" enctype="multipart/form-data">
+    <div class="card">
+        <h3 style="color: #0284c7;">Select Audio File</h3>
+        
+        <div class="form-group" style="margin-top: 1rem;">
+            <label class="form-label">Audio File (WAV, MP3, M4A, OGG, FLAC):</label>
+            <input type="file" id="audioFileInput" name="audio_file" accept=".wav,.mp3,.m4a,.ogg,.flac" class="form-control" required>
+        </div>
+
+        <input type="hidden" name="age_group" value="0-12m">
+        <input type="hidden" name="audio_type_hint" value="UNKNOWN">
+
+        <button type="submit" id="btnUploadSubmit" class="btn btn-primary" style="width: 100%; margin-top: 1.25rem; padding: 0.85rem; font-size: 1rem;">🔍 Auto-Detect & Analyze Audio File</button>
+    </div>
+</form>
+
+<!-- Upload Result Card -->
+<div id="uploadResultContainer" class="card" style="display: none; border: 2px solid #0284c7;">
+    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem; margin-bottom: 1.5rem;">
+        <h3 style="color: #0284c7;">📋 AI Screening Results</h3>
+        <span id="resRiskBadge" class="badge badge-low">LOW RISK</span>
+    </div>
+
+    <div class="grid-3" style="margin-bottom: 1.5rem;">
+        <div class="stat-box">
+            <div class="stat-label">AUTO-DETECTED SOUND</div>
+            <div id="resSoundType" class="stat-value" style="font-size: 1.4rem; color: #0284c7;">-</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-label">MODEL CONFIDENCE</div>
+            <div id="resConfidence" class="stat-value" style="font-size: 1.4rem;">-</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-label">SCREENING PATTERN</div>
+            <div id="resPattern" class="stat-value" style="font-size: 1.1rem; color: #0f172a; margin-top: 0.5rem;">-</div>
+        </div>
+    </div>
+
+    <!-- Audio Player -->
+    <div style="margin-bottom: 1.5rem;">
+        <label class="form-label">Audio Playback:</label>
+        <audio id="uploadAudioPlayer" controls style="width: 100%;"></audio>
+    </div>
+
+    <!-- Actions -->
+    <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
+        <a id="btnDownloadPDF" href="#" class="btn btn-primary" style="font-size: 0.95rem; padding: 0.75rem 1.5rem;">📄 Download Official PDF Clinical Report</a>
+        <a id="btnViewFullAnalysis" href="#" class="btn btn-secondary" style="font-size: 0.95rem;">🔗 Open Standalone Analysis URL</a>
+    </div>
+
+    <!-- Full Live Detailed Report Section -->
+    <div style="margin-top: 2rem; border-top: 2px dashed var(--border-color); padding-top: 1.5rem;">
+        <!-- 1. Sound Detection Summary & Precision Score -->
+        <div class="card" style="background: #f8fafc; margin-bottom: 1rem; border: 1px solid #e2e8f0;">
+            <h4 style="color: #0284c7; margin-bottom: 0.5rem; font-size: 1.1rem;">1. Automatic Sound Detection Summary</h4>
+            <div id="reportDetectionSummary" style="font-size: 0.95rem; line-height: 1.6; color: #0f172a;">-</div>
+            <div id="reportPrecisionMetric" style="margin-top: 0.75rem; font-weight: 700; color: #047857; font-size: 0.95rem; background: #ecfdf5; padding: 0.5rem 0.75rem; border-radius: 6px; border-left: 4px solid #10b981;">-</div>
+        </div>
+
+        <!-- 2. Home Actions Checklist (What Parents Should Do Upfront) -->
+        <div class="card" style="background: #f0fdf4; border: 1px solid #bbf7d0; margin-bottom: 1rem;">
+            <h4 style="color: #166534; margin-bottom: 0.5rem; font-size: 1.1rem;">🏡 What Parents Should Do (Home Care Actions)</h4>
+            <ul id="reportCaregiverChecklist" style="font-size: 0.92rem; line-height: 1.6; color: #15803d; padding-left: 1.3rem; margin: 0;"></ul>
+        </div>
+
+        <!-- 3. Hospital vs Home Care Advice -->
+        <div class="card" style="background: #f0f9ff; margin-bottom: 1.5rem; border: 1px solid #bae6fd;">
+            <h4 style="color: #0284c7; margin-bottom: 0.5rem; font-size: 1.1rem;">🏥 Hospital vs Home Care Advice</h4>
+            <div id="reportTriageGuidance" style="font-size: 0.95rem; line-height: 1.6; color: #0369a1; font-weight: 600; background: rgba(2, 132, 199, 0.08); padding: 0.75rem; border-radius: 6px; border-left: 4px solid #0284c7;">-</div>
+        </div>
+
+        <!-- 4. BOTTOM SECTION: Biological Rationale -->
+        <div style="border-top: 1px solid #e2e8f0; padding-top: 1.25rem; margin-top: 1.5rem;">
+            <div class="card" style="background: #f8fafc; margin-bottom: 1.5rem; border: 1px solid #e2e8f0;">
+                <h5 style="color: #7c3aed; margin-bottom: 0.4rem; font-size: 1rem;">Why This Sound / Irritation Is Happening</h5>
+                <div id="reportPathophysiology" style="font-size: 0.9rem; line-height: 1.5; color: #334155;">-</div>
+            </div>
+        </div>
+
+        <!-- 5. VERY BOTTOM: Emergency Precautionary Warning Guidance & Doctor Notice -->
+        <div class="card" style="background: #fff1f2; border: 2px solid #fda4af; padding: 1.25rem; margin-top: 1.5rem;">
+            <h4 style="color: #be123c; margin-bottom: 0.75rem; font-size: 1.15rem; display: flex; align-items: center; gap: 0.5rem;">
+                🚨 ⚠️ Emergency & Precautionary Warning Guidance
+            </h4>
+            
+            <p style="color: #9f1239; font-size: 0.92rem; font-weight: 600; margin-bottom: 0.75rem;">
+                If your child exhibits any of the following severe emergency warning signs (such as blue/dark lips or severe gasping), do NOT wait:
+            </p>
+
+            <ul id="reportRedFlags" style="font-size: 0.9rem; line-height: 1.6; color: #9f1239; padding-left: 1.3rem; margin-bottom: 1rem; font-weight: 600;"></ul>
+
+            <div id="reportEmergencyAction" style="background: #ffe4e6; padding: 0.85rem; border-radius: 6px; border-left: 5px solid #e11d48; color: #9f1239; font-size: 0.92rem; font-weight: 700; margin-bottom: 1rem;">
+                🚨 WHAT TO DO IMMEDIATELY: If blue/dark lips, gasping, or chest retractions are present, call emergency services (Ambulance/ER) or go to the nearest emergency hospital right away.
+            </div>
+
+            <div id="reportDoctorNotice" style="background: #ffffff; padding: 0.75rem; border-radius: 6px; border: 1px solid #fecdd3; color: #be123c; font-size: 0.9rem; font-weight: 700; text-align: center;">
+                🩺 Notice: If your child experiences blue or dark lips, extreme lethargy, or any worsening symptoms, please immediately contact your doctor or medical emergency center.
+            </div>
+        </div>
+
+        <!-- Medical Disclaimer -->
+        <div style="font-size: 0.8rem; color: #64748b; background: #f8fafc; padding: 0.75rem; border-radius: 6px; border: 1px solid var(--border-color); margin-top: 1rem;">
+            <strong>Disclaimer:</strong> This AI screening tool uses audio signal pattern matching to assist parents and caregivers. It does not replace a doctor's examination. Always consult a qualified pediatrician for medical diagnosis.
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/upload.js') }}"></script>
+{% endblock %}

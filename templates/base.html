@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Pediatric AI Medical Screening Assistant{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+</head>
+<body>
+
+    <!-- Left Sidebar Navigation -->
+    <aside class="sidebar">
+        <a href="/" class="sidebar-brand">
+            🏥 Pediatric AI Assistant
+        </a>
+        <ul class="sidebar-nav">
+            <li>
+                <a href="/dashboard" class="{% if request.path == '/dashboard' or request.path == '/' %}active{% endif %}">
+                    📊 Clinical Dashboard
+                </a>
+            </li>
+            <li>
+                <a href="/live" class="{% if request.path == '/live' %}active{% endif %}">
+                    🎙️ Live Record & Analyze
+                </a>
+            </li>
+            <li>
+                <a href="/upload" class="{% if request.path == '/upload' %}active{% endif %}">
+                    📁 Upload Audio File
+                </a>
+            </li>
+            <li>
+                <a href="/history" class="{% if request.path == '/history' %}active{% endif %}">
+                    📜 Screening History & Reports
+                </a>
+            </li>
+        </ul>
+
+        <div class="sidebar-footer">
+            <p><strong>Pediatric AI v2.4</strong></p>
+            <p>Acoustic Screening & Caregiver Decision Support</p>
+        </div>
+    </aside>
+
+    <!-- App Main Right Wrapper -->
+    <div class="app-wrapper">
+        <header class="top-header">
+            <h1>🩺 Pediatric Health & Acoustic Screening Platform</h1>
+            <div style="display: flex; gap: 1rem; align-items: center; font-size: 0.85rem; color: #475569;">
+                <span>System Status: <strong style="color: #10b981;">● Active Clinical Mode</strong></span>
+            </div>
+        </header>
+
+        <div class="disclaimer-banner">
+            ⚠️ <strong>MEDICAL DISCLAIMER:</strong> This AI screening tool is designed for observational research. It does not replace a doctor's physical diagnosis. Seek urgent medical evaluation for severe breathing difficulty or blue lips/face.
+        </div>
+
+        <main class="main-container">
+            {% block content %}{% endblock %}
+        </main>
+
+        <footer>
+            <p>Pediatric Acoustic Disease & Pain Screening System &copy; 2026</p>
+        </footer>
+    </div>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

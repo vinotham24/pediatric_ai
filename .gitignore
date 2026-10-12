@@ -1,0 +1,23 @@
+﻿.venv/
+__pycache__/
+*.py[cod]
+
+# Local recordings and research audio datasets
+recordings/
+datasets/
+sample_upload_files/
+
+# Local/generated artifacts
+models/
+reports/
+scratch/
+database/*.db
+database/*.sqlite
+database/*.sqlite3
+
+# Secrets and editor/OS files
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db

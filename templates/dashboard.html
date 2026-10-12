@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Clinical Dashboard - Pediatric AI{% endblock %}
+
+{% block content %}
+<div class="card" style="border-left: 4px solid #0284c7;">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+        <div>
+            <h2>Clinical Screening Dashboard</h2>
+            <p style="color: var(--text-muted); font-size: 0.9rem;">Pediatric acoustic sound event & disease screening overview</p>
+        </div>
+        <div style="display: flex; gap: 1rem; align-items: center;">
+            <a href="/live" class="btn btn-primary">🎙️ Live Record & Analyze</a>
+            <a href="/upload" class="btn btn-secondary">📁 Upload Audio File</a>
+        </div>
+    </div>
+</div>
+
+<div class="grid-2">
+    <!-- Live Audio Waveform & Detection -->
+    <div class="card">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 0.75rem;">
+            <span id="micStatus" style="color: #64748b; font-weight: 700;">● SYSTEM READY</span>
+            <span id="recordingTimer" style="color: var(--text-muted); font-family: monospace;">00:00</span>
+        </div>
+
+        <canvas id="waveformCanvas" class="waveform-canvas"></canvas>
+
+        <div style="margin-top: 1.25rem; display: flex; justify-content: space-between; align-items: center; background: #f8fafc; padding: 1rem; border-radius: 8px; border: 1px solid var(--border-color);">
+            <div>
+                <div style="font-size: 0.8rem; color: var(--text-muted);">AUTO-DETECTED SOUND</div>
+                <div id="liveDetectedSound" style="font-size: 1.5rem; font-weight: 800; color: #0284c7;">NONE</div>
+                <div id="livePattern" style="font-size: 0.85rem; color: #475569;">Ready for audio input...</div>
+            </div>
+            <div style="text-align: right;">
+                <div style="font-size: 0.8rem; color: var(--text-muted);">CONFIDENCE</div>
+                <div id="liveConfidence" style="font-size: 1.5rem; font-weight: 800; color: #0f172a;">0.0%</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Overall Risk Status & Event Counters -->
+    <div>
+        <div class="card" style="text-align: center;">
+            <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.5rem;">OVERALL ACQUIRED RISK LEVEL</div>
+            <div id="riskBadgeContainer">
+                <span class="badge badge-low" style="font-size: 1.1rem; padding: 0.5rem 1.5rem;">🟢 LOW RISK</span>
+            </div>
+            <div id="riskDriversText" style="font-size: 0.85rem; color: #64748b; margin-top: 0.75rem;">Baseline acoustic features within standard range</div>
+        </div>
+
+        <div class="grid-3">
+            <div class="stat-box">
+                <div class="stat-label">CRY EVENTS</div>
+                <div id="cntCry" class="stat-value">0</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">COUGH EVENTS</div>
+                <div id="cntCough" class="stat-value">0</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">BREATHING</div>
+                <div id="cntResp" class="stat-value">0</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- AI Assistant Explanation Card -->
+<div class="card">
+    <h3 style="color: #0284c7; margin-bottom: 0.75rem;">🤖 AI Assistant Explanation</h3>
+    <div id="aiExplanationBox" style="color: #334155; font-size: 0.95rem; line-height: 1.6;">
+        Upload an audio file or record live microphone sound to generate real-time acoustic explanations.
+    </div>
+</div>
+{% endblock %}
