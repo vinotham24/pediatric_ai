@@ -1,0 +1,14 @@
+              precision    recall  f1-score   support
+
+  belly_pain       0.17      0.33      0.22         6
+     burping       0.00      0.00      0.00         5
+    cold_hot       0.00      0.00      0.00         3
+  discomfort       0.06      0.09      0.07        11
+      hungry       0.83      0.80      0.82       225
+      lonely       0.00      0.00      0.00         5
+      scared       0.00      0.00      0.00         3
+       tired       0.06      0.06      0.06        17
+
+    accuracy                           0.67       275
+   macro avg       0.14      0.16      0.15       275
+weighted avg       0.69      0.67      0.68       275

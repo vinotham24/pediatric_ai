@@ -1,0 +1,188 @@
+
+{% extends "base.html" %}
+
+{% block title %}Experimental Cry Model Test - Pediatric AI{% endblock %}
+
+{% block content %}
+
+<div class="card">
+    <h2>Experimental Baby Cry Classification</h2>
+    <p style="color: var(--text-muted);">
+        Test the newly trained Random Forest model using a baby-cry audio recording.
+        This is a separate experimental model and does not affect the existing
+        cry/cough screening system.
+    </p>
+</div>
+
+<div class="card">
+    <h3 style="color: #0284c7;">Upload Cry Audio</h3>
+
+    <form id="cryModelForm" enctype="multipart/form-data">
+        <div class="form-group" style="margin-top: 1rem;">
+            <label class="form-label">Select Audio File:</label>
+            <input
+                type="file"
+                id="cryAudioFile"
+                name="audio_file"
+                accept=".wav,.mp3,.m4a,.ogg,.flac"
+                class="form-control"
+                required
+            >
+        </div>
+
+        <button
+            type="submit"
+            id="cryTestButton"
+            class="btn btn-primary"
+            style="width: 100%; margin-top: 1rem;"
+        >
+            Test Cry Classification
+        </button>
+    </form>
+
+    <p id="cryStatus" style="margin-top: 1rem;"></p>
+</div>
+
+<div id="cryResult" class="card" style="display: none;">
+    <h3 style="color: #0284c7;">Model Prediction</h3>
+
+    <div class="stat-box" style="margin: 1rem 0;">
+        <div class="stat-label">PREDICTED CRY CATEGORY</div>
+        <div
+            id="predictedCryLabel"
+            class="stat-value"
+            style="font-size: 1.5rem; color: #0284c7;"
+        >-</div>
+    </div>
+
+    <h4 style="margin: 1.5rem 0 0.75rem;">
+        Model Scores for Each Category
+    </h4>
+
+    <div id="cryScores"></div>
+
+    <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 1rem;">
+        These scores represent the model's predicted class probabilities.
+        They are not clinically validated confidence measurements.
+    </p>
+</div>
+
+<div class="card" style="border-left: 4px solid #f59e0b;">
+    <h3>Important Disclaimer</h3>
+    <p style="color: var(--text-muted);">
+        This is an experimental machine-learning model trained using
+        caregiver-reported cry categories. Its predictions are not medical
+        diagnoses and must not be used to determine a baby's medical condition.
+        Always consult a qualified pediatrician when concerned.
+    </p>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const cryForm = document.getElementById("cryModelForm");
+const cryStatus = document.getElementById("cryStatus");
+const cryButton = document.getElementById("cryTestButton");
+const cryResult = document.getElementById("cryResult");
+
+cryForm.addEventListener("submit", async function(event) {
+    event.preventDefault();
+
+    const fileInput = document.getElementById("cryAudioFile");
+
+    if (!fileInput.files.length) {
+        cryStatus.textContent = "Please select an audio file.";
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append("audio_file", fileInput.files[0]);
+
+    cryButton.disabled = true;
+    cryButton.textContent = "Analyzing Audio...";
+    cryStatus.textContent = "Processing your audio. Please wait.";
+    cryResult.style.display = "none";
+
+    try {
+        const response = await fetch("/api/cry-model/test", {
+            method: "POST",
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || "Unable to analyze audio.");
+        }
+
+        const prediction = data.predicted_label || data.prediction;
+
+        if (!prediction) {
+            throw new Error("The server did not return a prediction.");
+        }
+
+        const isUncertain = Boolean(data.is_uncertain);
+        const predictedLabelEl = document.getElementById("predictedCryLabel");
+        if (isUncertain) {
+            predictedLabelEl.textContent = "UNCERTAIN";
+            predictedLabelEl.style.color = "#b45309";
+        } else {
+            predictedLabelEl.textContent = prediction.replaceAll("_", " ").toUpperCase();
+            predictedLabelEl.style.color = "#0284c7";
+        }
+
+        const scoresContainer = document.getElementById("cryScores");
+        scoresContainer.replaceChildren();
+
+        const probabilities = data.probabilities || {};
+
+        for (const [label, rawScore] of Object.entries(probabilities)) {
+            const score = Number(rawScore);
+            const percentage = score <= 1 ? score * 100 : score;
+
+            const row = document.createElement("div");
+            row.style.marginBottom = "1rem";
+
+            const heading = document.createElement("div");
+            heading.style.display = "flex";
+            heading.style.justifyContent = "space-between";
+            heading.style.marginBottom = "0.35rem";
+
+            const name = document.createElement("strong");
+            name.textContent = label.replaceAll("_", " ");
+
+            const value = document.createElement("span");
+            value.textContent = percentage.toFixed(2) + "%";
+
+            heading.append(name, value);
+
+            const track = document.createElement("div");
+            track.style.background = "#e2e8f0";
+            track.style.height = "10px";
+            track.style.borderRadius = "6px";
+            track.style.overflow = "hidden";
+
+            const bar = document.createElement("div");
+            bar.style.width = Math.max(0, Math.min(100, percentage)) + "%";
+            bar.style.height = "100%";
+            bar.style.background = "#0284c7";
+            bar.style.borderRadius = "6px";
+
+            track.appendChild(bar);
+            row.append(heading, track);
+            scoresContainer.appendChild(row);
+        }
+
+        cryResult.style.display = "block";
+        cryStatus.textContent = data.warning || "Audio analysis completed.";
+
+    } catch (error) {
+        cryStatus.textContent = "Error: " + error.message;
+    } finally {
+        cryButton.disabled = false;
+        cryButton.textContent = "Test Cry Classification";
+    }
+});
+</script>
+{% endblock %}
