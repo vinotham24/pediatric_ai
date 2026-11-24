@@ -1,0 +1,72 @@
+{
+  "archive": "C:\\Users\\sruja\\Downloads\\archive.zip",
+  "audio_file_count": 1313,
+  "total_audio_bytes": 362669269,
+  "all_files_decodable": true,
+  "documentation_candidates": [],
+  "raw_folder_counts": {
+    "belly pain": 124,
+    "burping": 108,
+    "cold_hot": 108,
+    "discomfort": 135,
+    "hungry": 382,
+    "laugh": 108,
+    "noise": 108,
+    "silence": 108,
+    "tired": 132
+  },
+  "exact_payload_count": 857,
+  "exact_duplicate_groups": 455,
+  "groups_with_filename_reason_code": 457,
+  "folder_conflict_groups_resolved_by_filename_code": 444,
+  "unresolved_label_conflict_groups": 0,
+  "groups_overlapping_existing_train_or_test": {
+    "train": 371,
+    "test": 86
+  },
+  "unique_unseen_supported_counts": {
+    "belly_pain": 41,
+    "burping": 27,
+    "cold_hot": 8,
+    "discomfort": 0,
+    "hungry": 0,
+    "lonely": 0,
+    "scared": 0,
+    "tired": 0
+  },
+  "production_classes_absent_from_archive_folders": [
+    "lonely",
+    "scared"
+  ],
+  "production_classes_with_no_new_unseen_audio": [
+    "discomfort",
+    "hungry",
+    "lonely",
+    "scared",
+    "tired"
+  ],
+  "unique_unseen_counts_added_to_existing_training_split": {
+    "belly_pain": 41,
+    "burping": 27,
+    "cold_hot": 8,
+    "discomfort": 0,
+    "hungry": 0,
+    "lonely": 0,
+    "scared": 0,
+    "tired": 0
+  },
+  "combined_available_train_counts_before_resampling": {
+    "belly_pain": 78,
+    "burping": 47,
+    "cold_hot": 24,
+    "discomfort": 47,
+    "hungry": 899,
+    "lonely": 18,
+    "scared": 12,
+    "tired": 65
+  },
+  "maximum_balanced_examples_per_class_without_oversampling": 12,
+  "balanced_dataset_created": false,
+  "balance_decision": "Not created: folder conflicts can be resolved by embedded Donateacry reason codes. Only 76 unique supported recordings remain after excluding the existing train/test split. The combined dataset's smallest class is scared (12 examples), so equal downsampling would leave only 96 total examples; naive oversampling would repeat the same recordings and risk overfitting. The new files are kept separate for a class-weighted candidate.",
+  "manifest_csv": "C:\\Users\\sruja\\pediatric_ai\\training\\cry_archive_audit_v1\\archive_audio_audit.csv"
+}

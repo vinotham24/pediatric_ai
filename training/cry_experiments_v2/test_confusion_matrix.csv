@@ -1,0 +1,9 @@
+,belly_pain,burping,cold_hot,discomfort,hungry,lonely,scared,tired
+belly_pain,0,0,1,2,2,0,1,0
+burping,0,0,0,1,1,0,2,1
+cold_hot,1,0,0,0,2,0,0,0
+discomfort,2,0,0,2,6,0,0,1
+hungry,24,31,13,33,54,25,32,13
+lonely,0,0,0,1,1,0,1,2
+scared,0,1,0,1,0,1,0,0
+tired,4,1,0,1,1,6,2,2

@@ -1,0 +1,13 @@
+{
+    "selected_model": "Balanced Random Forest",
+    "feature_count": 91,
+    "training_recordings": 1114,
+    "test_recordings": 275,
+    "cv_balanced_accuracy": 0.17814441144604187,
+    "cv_macro_f1": 0.09552146942188787,
+    "test_accuracy": 0.2109090909090909,
+    "test_balanced_accuracy": 0.06743315508021391,
+    "test_macro_f1": 0.06973715021660226,
+    "candidate_model": "C:\\Users\\sruja\\pediatric_ai\\models\\cry_experiments_v2\\best_cry_candidate.joblib",
+    "production_model_modified": false
+}

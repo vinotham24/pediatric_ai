@@ -1,0 +1,285 @@
+{
+  "source_archive": "C:\\Users\\sruja\\Downloads\\archive.zip",
+  "audio_validation": {
+    "eligible_unique_unseen_audio": 76,
+    "feature_rows_created": 76,
+    "errors": []
+  },
+  "features": {
+    "count": 91,
+    "ordered_names_match_production": true
+  },
+  "training_counts_before_archive": {
+    "hungry": 899,
+    "tired": 65,
+    "discomfort": 47,
+    "belly_pain": 37,
+    "burping": 20,
+    "lonely": 18,
+    "cold_hot": 16,
+    "scared": 12
+  },
+  "new_training_counts": {
+    "belly_pain": 41,
+    "burping": 27,
+    "cold_hot": 8
+  },
+  "training_counts_after_archive": {
+    "hungry": 899,
+    "belly_pain": 78,
+    "tired": 65,
+    "burping": 47,
+    "discomfort": 47,
+    "cold_hot": 24,
+    "lonely": 18,
+    "scared": 12
+  },
+  "class_balancing": "SVC class_weight='balanced'; preserves all genuine examples without duplicating recordings. This changes class influence, not the raw counts.",
+  "untouched_existing_test_set": 275,
+  "baseline_production_model": {
+    "model_name": "svc_balanced",
+    "accuracy": 0.6727272727272727,
+    "balanced_accuracy": 0.16093879976232917,
+    "macro_f1": 0.14698836022365433,
+    "predicted_counts": {
+      "hungry": 217,
+      "tired": 16,
+      "belly_pain": 12,
+      "lonely": 5,
+      "scared": 2,
+      "burping": 5,
+      "cold_hot": 2,
+      "discomfort": 16
+    },
+    "classification_report": {
+      "belly_pain": {
+        "precision": 0.16666666666666666,
+        "recall": 0.3333333333333333,
+        "f1-score": 0.2222222222222222,
+        "support": 6.0
+      },
+      "burping": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 5.0
+      },
+      "cold_hot": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 3.0
+      },
+      "discomfort": {
+        "precision": 0.0625,
+        "recall": 0.09090909090909091,
+        "f1-score": 0.07407407407407407,
+        "support": 11.0
+      },
+      "hungry": {
+        "precision": 0.8341013824884793,
+        "recall": 0.8044444444444444,
+        "f1-score": 0.8190045248868778,
+        "support": 225.0
+      },
+      "lonely": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 5.0
+      },
+      "scared": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 3.0
+      },
+      "tired": {
+        "precision": 0.0625,
+        "recall": 0.058823529411764705,
+        "f1-score": 0.06060606060606061,
+        "support": 17.0
+      },
+      "accuracy": 0.6727272727272727,
+      "macro avg": {
+        "precision": 0.14072100614439326,
+        "recall": 0.16093879976232917,
+        "f1-score": 0.14698836022365433,
+        "support": 275.0
+      },
+      "weighted avg": {
+        "precision": 0.6924465856723921,
+        "recall": 0.6727272727272727,
+        "f1-score": 0.6816526155563589,
+        "support": 275.0
+      }
+    }
+  },
+  "archive_augmented_candidate": {
+    "accuracy": 0.6654545454545454,
+    "balanced_accuracy": 0.15982768865121805,
+    "macro_f1": 0.15078088706747067,
+    "predicted_counts": {
+      "hungry": 216,
+      "tired": 17,
+      "belly_pain": 9,
+      "lonely": 7,
+      "scared": 2,
+      "cold_hot": 2,
+      "burping": 4,
+      "discomfort": 18
+    },
+    "classification_report": {
+      "belly_pain": {
+        "precision": 0.2222222222222222,
+        "recall": 0.3333333333333333,
+        "f1-score": 0.26666666666666666,
+        "support": 6.0
+      },
+      "burping": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 5.0
+      },
+      "cold_hot": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 3.0
+      },
+      "discomfort": {
+        "precision": 0.05555555555555555,
+        "recall": 0.09090909090909091,
+        "f1-score": 0.06896551724137931,
+        "support": 11.0
+      },
+      "hungry": {
+        "precision": 0.8287037037037037,
+        "recall": 0.7955555555555556,
+        "f1-score": 0.8117913832199547,
+        "support": 225.0
+      },
+      "lonely": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 5.0
+      },
+      "scared": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 3.0
+      },
+      "tired": {
+        "precision": 0.058823529411764705,
+        "recall": 0.058823529411764705,
+        "f1-score": 0.058823529411764705,
+        "support": 17.0
+      },
+      "accuracy": 0.6654545454545454,
+      "macro avg": {
+        "precision": 0.1456631263616558,
+        "recall": 0.15982768865121805,
+        "f1-score": 0.15078088706747067,
+        "support": 275.0
+      },
+      "weighted avg": {
+        "precision": 0.6887373737373739,
+        "recall": 0.6654545454545454,
+        "f1-score": 0.6764061160514363,
+        "support": 275.0
+      }
+    },
+    "confusion_matrix": [
+      [
+        2,
+        0,
+        0,
+        2,
+        2,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        2,
+        3,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        1,
+        2,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        1,
+        10,
+        0,
+        0,
+        0
+      ],
+      [
+        6,
+        4,
+        2,
+        11,
+        179,
+        7,
+        2,
+        14
+      ],
+      [
+        0,
+        0,
+        0,
+        1,
+        2,
+        0,
+        0,
+        2
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        3,
+        0,
+        0,
+        0
+      ],
+      [
+        1,
+        0,
+        0,
+        0,
+        15,
+        0,
+        0,
+        1
+      ]
+    ]
+  },
+  "promotion": "not promoted; production inference artifact remains unchanged",
+  "artifacts": {
+    "clean_audio_dir": "C:\\Users\\sruja\\pediatric_ai\\datasets\\cry_archive_clean_v1\\audio",
+    "archive_features_csv": "C:\\Users\\sruja\\pediatric_ai\\training\\cry_archive_audit_v1\\cry_archive_features.csv",
+    "combined_training_csv": "C:\\Users\\sruja\\pediatric_ai\\training\\cry_archive_audit_v1\\cry_train_archive_augmented.csv",
+    "candidate_model": "C:\\Users\\sruja\\pediatric_ai\\models\\cry_experiments_v3\\archive_augmented_svc.joblib"
+  }
+}

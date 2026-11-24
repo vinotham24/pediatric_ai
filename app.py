@@ -51,7 +51,9 @@ pipeline_instance = InferencePipeline()
 live_sessions = {}
 
 # Separate experimental Cry Random Forest model.
-cry_model_service = CryModelService()
+# Load the experimental model on first use so a missing/corrupt model does not
+# prevent the rest of the Flask application from starting.
+cry_model_service = None
 
 
 # ============================================================
@@ -445,53 +447,15 @@ def api_test_cry_model():
             "error": "Please select an audio file."
         }), 400
 
-    original_filename = secure_filename(audio_file.filename)
-
-    allowed_extensions = {
-        '.wav',
-        '.mp3',
-        '.m4a',
-        '.ogg',
-        '.flac'
-    }
-
-    extension = os.path.splitext(original_filename)[1].lower()
-
-    if extension not in allowed_extensions:
-        return jsonify({
-            "success": False,
-            "error": (
-                "Unsupported audio format. "
-                "Please upload WAV, MP3, M4A, OGG or FLAC."
-            )
-        }), 400
-
-    temp_path = None
+    source_path = wav_path = None
 
     try:
-        # Create a temporary file using the uploaded file extension.
-        with tempfile.NamedTemporaryFile(
-            suffix=extension,
-            delete=False
-        ) as temp_file:
+        source_path, wav_path = audio_service.decode_cry_upload(audio_file)
 
-            temp_path = temp_file.name
-            audio_file.save(temp_path)
-
-        if not os.path.exists(temp_path):
-            return jsonify({
-                "success": False,
-                "error": "The uploaded audio file could not be saved."
-            }), 500
-
-        if os.path.getsize(temp_path) == 0:
-            return jsonify({
-                "success": False,
-                "error": "The uploaded audio file is empty."
-            }), 400
-
-        # Run the separate experimental Cry Random Forest model.
-        prediction = cry_model_service.predict(temp_path)
+        global cry_model_service
+        if cry_model_service is None:
+            cry_model_service = CryModelService()
+        prediction = cry_model_service.predict(wav_path)
 
         predicted_label = prediction.get('predicted_label')
         probabilities = prediction.get('probabilities', {})
@@ -516,29 +480,24 @@ def api_test_cry_model():
             )
         })
 
-    except Exception as e:
-        err_msg = traceback.format_exc()
-
-        print(
-            f"ERROR IN CRY MODEL API: {err_msg}",
-            flush=True
-        )
-
+    except ValueError as e:
+        print(f"Invalid cry audio upload: {traceback.format_exc()}", flush=True)
         return jsonify({
             "success": False,
             "error": str(e)
-        }), 500
+        }), 400
+    except Exception as e:
+        print(f"ERROR IN CRY MODEL API: {traceback.format_exc()}", flush=True)
+        message = 'Cry model is unavailable.' if cry_model_service is None else 'Audio prediction failed.'
+        return jsonify({"success": False, "error": message}), 503 if cry_model_service is None else 500
 
     finally:
-        # Remove the temporary uploaded file.
-        if temp_path and os.path.exists(temp_path):
-            try:
-                os.remove(temp_path)
-            except OSError:
-                print(
-                    f"Could not remove temporary file: {temp_path}",
-                    flush=True
-                )
+        for temporary_path in (source_path, wav_path):
+            if temporary_path:
+                try:
+                    audio_service.delete_recording(temporary_path)
+                except OSError:
+                    print(f"Could not remove temporary audio file: {temporary_path}", flush=True)
 
 
 # ============================================================
@@ -931,13 +890,13 @@ if __name__ == '__main__':
 
     print(
         "Starting Pediatric AI Health Screening "
-        "Web Application on port 5050..."
+        "Web Application on port 5051..."
     )
 
     socketio.run(
         app,
         host='0.0.0.0',
-        port=5050,
+        port=5051,
         debug=False,
         use_reloader=False,
         allow_unsafe_werkzeug=True

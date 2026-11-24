@@ -44,7 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (micSecurityBanner) {
                 micSecurityBanner.style.display = 'block';
                 if (isNotSecureContext && micSecurityText) {
-                    micSecurityText.innerHTML = `Chrome blocks microphone access on unencrypted IP links. Please open <a href="http://127.0.0.1:5050/live" style="font-weight: 700; color: #b45309; text-decoration: underline;">http://127.0.0.1:5050/live</a> or <a href="http://localhost:5050/live" style="font-weight: 700; color: #b45309; text-decoration: underline;">http://localhost:5050/live</a> in Chrome to enable microphone access.`;
+                    micSecurityText.innerHTML = `Chrome blocks microphone access on unencrypted IP links. Please open <a href="http://127.0.0.1:5051/live" style="font-weight: 700; color: #b45309; text-decoration: underline;">http://127.0.0.1:5051/live</a> or <a href="http://localhost:5051/live" style="font-weight: 700; color: #b45309; text-decoration: underline;">http://localhost:5051/live</a> in Chrome to enable microphone access.`;
                 }
             }
         }
@@ -67,7 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const isNotLocal = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
                 let errMsg = 'Microphone API is disabled by Chrome on this connection.\n\n';
                 if (isNotLocal && window.location.protocol === 'http:') {
-                    errMsg += 'Chrome strictly requires accessing via http://127.0.0.1:5050/live or http://localhost:5050/live (or HTTPS) to allow microphone recording.\n\nPlease switch to http://127.0.0.1:5050/live in your browser address bar.';
+                    errMsg += 'Chrome strictly requires accessing via http://127.0.0.1:5051/live or http://localhost:5051/live (or HTTPS) to allow microphone recording.\n\nPlease switch to http://127.0.0.1:5051/live in your browser address bar.';
                 } else {
                     errMsg += 'Please ensure microphone permissions are granted in Chrome settings (click the lock/icon next to the URL address bar).';
                 }
@@ -139,7 +139,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
                 userHelpMsg += 'No microphone found: Please ensure a microphone is connected to your system.';
             } else {
-                userHelpMsg += `Error: ${err.message || err.name}\n\nMake sure to open http://127.0.0.1:5050/live in Chrome.`;
+                userHelpMsg += `Error: ${err.message || err.name}\n\nMake sure to open http://127.0.0.1:5051/live in Chrome.`;
             }
             alert(userHelpMsg);
         }

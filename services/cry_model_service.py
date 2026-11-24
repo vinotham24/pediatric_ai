@@ -21,15 +21,9 @@ class CryModelService:
         if model_path is not None:
             candidates.append(Path(model_path))
 
-        candidates.extend([
-            project_root / "models" / "cry_random_forest.joblib",
-            project_root / "models" / "cry_best.joblib",
-            project_root / "models" / "cry_experiments" / "svc_oversampled.joblib",
-            project_root / "models" / "cry_experiments" / "random_forest_oversampled.joblib",
-            project_root / "models" / "cry_experiments" / "random_forest.joblib",
-            project_root / "models" / "cry_experiments" / "balanced_random_forest.joblib",
-            project_root / "models" / "cry_experiments" / "extra_trees.joblib",
-        ])
+        # Inference is pinned to the production artifact; experiments are never
+        # promoted implicitly if it is absent.
+        candidates.append(project_root / "models" / "cry_random_forest.joblib")
 
         model_file = None
         for candidate in candidates:
@@ -74,10 +68,9 @@ class CryModelService:
                 sr=SAMPLE_RATE,
                 mono=True,
                 duration=DURATION,
-                res_type="kaiser_best",
             )
-        except Exception as exc:  # pragma: no cover - network? not relevant
-            raise ValueError(f"Unable to decode audio file: {audio_path}") from exc
+        except Exception as exc:
+            raise ValueError(f"Unable to decode converted WAV audio: {exc}") from exc
 
         if audio.size == 0:
             raise ValueError("The uploaded audio file is empty.")
@@ -162,23 +155,32 @@ class CryModelService:
         if hasattr(self.model, "predict_proba"):
             probabilities = self.model.predict_proba(input_data)[0]
             class_labels = [str(label) for label in self.model.classes_]
+            predicted_class = str(self.model.predict(input_data)[0])
         else:
             predictions = self.model.predict(input_data)[0]
             class_labels = [str(label) for label in self.classes]
             probabilities = np.zeros(len(class_labels), dtype=float)
-            probabilities[class_labels.index(str(predictions))] = 1.0
+            predicted_class = str(predictions)
+            if predicted_class not in class_labels:
+                raise ValueError(f"Model predicted an unsupported class: {predicted_class}")
+            probabilities[class_labels.index(predicted_class)] = 1.0
+
+        if len(probabilities) != len(class_labels) or not np.isfinite(probabilities).all():
+            raise ValueError("Model returned invalid class probabilities.")
 
         probability_results = {
             label: round(float(score), 4)
             for label, score in zip(class_labels, probabilities)
         }
 
-        ranked = sorted(
-            probability_results.items(),
-            key=lambda item: item[1],
-            reverse=True,
-        )
-        top_label, top_score = ranked[0] if ranked else ("uncertain", 0.0)
+        if predicted_class not in probability_results:
+            raise ValueError(
+                f"Model predicted a class missing from its probability output: {predicted_class}"
+            )
+        # SVC's calibrated probability argmax can disagree with its classifier
+        # decision. Use predict() for the label and report that class's score.
+        top_label = predicted_class
+        top_score = probability_results[top_label]
 
         is_uncertain = top_score < self.confidence_threshold
         predicted_label = "uncertain" if is_uncertain else top_label
