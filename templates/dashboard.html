@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 
-{% block title %}Clinical Dashboard - Pediatric AI{% endblock %}
+{% block title %}Research Dashboard - Pediatric AI{% endblock %}
 
 {% block content %}
 <div class="card" style="border-left: 4px solid #0284c7;">
     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
         <div>
-            <h2>Clinical Screening Dashboard</h2>
-            <p style="color: var(--text-muted); font-size: 0.9rem;">Pediatric acoustic sound event & disease screening overview</p>
+            <h2>Research Dashboard</h2>
+            <p style="color: var(--text-muted); font-size: 0.9rem;">The legacy live summary widgets below are not connected to the current microphone workflow. Use the Live Record &amp; Analyze page for a one-recording analysis.</p>
         </div>
         <div style="display: flex; gap: 1rem; align-items: center;">
             <a href="/live" class="btn btn-primary">🎙️ Live Record & Analyze</a>
@@ -33,20 +33,20 @@
                 <div id="livePattern" style="font-size: 0.85rem; color: #475569;">Ready for audio input...</div>
             </div>
             <div style="text-align: right;">
-                <div style="font-size: 0.8rem; color: var(--text-muted);">CONFIDENCE</div>
-                <div id="liveConfidence" style="font-size: 1.5rem; font-weight: 800; color: #0f172a;">0.0%</div>
+                <div style="font-size: 0.8rem; color: var(--text-muted);">DETECTOR SCORE STATUS</div>
+                <div id="liveConfidence" style="font-size: 1rem; font-weight: 800; color: #0f172a;">Unvalidated</div>
             </div>
         </div>
     </div>
 
-    <!-- Overall Risk Status & Event Counters -->
+    <!-- Risk assessment is intentionally unavailable -->
     <div>
         <div class="card" style="text-align: center;">
-            <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.5rem;">OVERALL ACQUIRED RISK LEVEL</div>
+            <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.5rem;">RISK ASSESSMENT</div>
             <div id="riskBadgeContainer">
-                <span class="badge badge-low" style="font-size: 1.1rem; padding: 0.5rem 1.5rem;">🟢 LOW RISK</span>
+                <span>Not calculated</span>
             </div>
-            <div id="riskDriversText" style="font-size: 0.85rem; color: #64748b; margin-top: 0.75rem;">Baseline acoustic features within standard range</div>
+            <div id="riskDriversText" style="font-size: 0.85rem; color: #64748b; margin-top: 0.75rem;">No validated clinical risk calculation is available.</div>
         </div>
 
         <div class="grid-3">
@@ -68,9 +68,9 @@
 
 <!-- AI Assistant Explanation Card -->
 <div class="card">
-    <h3 style="color: #0284c7; margin-bottom: 0.75rem;">🤖 AI Assistant Explanation</h3>
+    <h3 style="color: #0284c7; margin-bottom: 0.75rem;">Research output notice</h3>
     <div id="aiExplanationBox" style="color: #334155; font-size: 0.95rem; line-height: 1.6;">
-        Upload an audio file or record live microphone sound to generate real-time acoustic explanations.
+        Cry and sound-event outputs are experimental, may be uncertain, and are not medical findings.
     </div>
 </div>
 {% endblock %}

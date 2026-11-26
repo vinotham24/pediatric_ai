@@ -4,6 +4,7 @@ import time
 import tempfile
 import subprocess
 from pathlib import Path
+from werkzeug.utils import secure_filename
 import soundfile as sf
 import numpy as np
 from config import LIVE_RECORDINGS_DIR, UPLOAD_RECORDINGS_DIR, PROCESSED_RECORDINGS_DIR
@@ -48,12 +49,20 @@ class AudioService:
         return filename, filepath
 
     def save_uploaded_file(self, file_storage):
-        """
-        Saves uploaded FileStorage object to recordings/uploads/
-        """
-        filename = f"upload_{uuid.uuid4().hex[:8]}_{file_storage.filename}"
+        """Validate an audio extension and save under an opaque safe filename."""
+        safe_source_name = secure_filename(file_storage.filename or "")
+        suffix = Path(safe_source_name).suffix.lower()
+        if not safe_source_name or suffix not in self.CRY_UPLOAD_EXTENSIONS:
+            raise ValueError("Unsupported audio format. Choose a supported audio file.")
+        filename = f"upload_{uuid.uuid4().hex[:12]}{suffix}"
         filepath = os.path.join(UPLOAD_RECORDINGS_DIR, filename)
-        file_storage.save(filepath)
+        try:
+            file_storage.save(filepath)
+            if not os.path.isfile(filepath) or os.path.getsize(filepath) == 0:
+                raise ValueError("The uploaded audio file is empty.")
+        except Exception:
+            self.delete_recording(filepath)
+            raise
         return filename, filepath
 
     def decode_cry_upload(self, file_storage):

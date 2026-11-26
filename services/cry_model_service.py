@@ -6,15 +6,29 @@ import librosa
 import numpy as np
 import pandas as pd
 
+from services.prediction_status import determine_prediction_status
+
 
 SAMPLE_RATE = 16000
 DURATION = 5
 TARGET_SAMPLES = SAMPLE_RATE * DURATION
 
 
+def validate_class_order(model_classes, declared_classes):
+    """Reject packages whose saved class order disagrees with predict_proba."""
+    model_order = [str(label) for label in model_classes]
+    declared_order = [str(label) for label in declared_classes]
+    if model_order != declared_order:
+        raise ValueError(
+            "Cry model class order mismatch: package classes must match "
+            "estimator.classes_ exactly."
+        )
+    return model_order
+
+
 class CryModelService:
 
-    def __init__(self, model_path=None, confidence_threshold=0.5):
+    def __init__(self, model_path=None):
         project_root = Path(__file__).resolve().parent.parent
 
         candidates = []
@@ -39,10 +53,10 @@ class CryModelService:
         package = joblib.load(model_file)
         self.model = package["model"]
         self.feature_columns = list(package.get("feature_columns", []))
-        self.classes = [str(label) for label in package.get("classes", list(self.model.classes_))]
+        package_classes = package.get("classes", list(self.model.classes_))
+        self.classes = [str(label) for label in package_classes]
         self.model_name = package.get("model_name", model_file.name)
-        self.confidence_threshold = float(confidence_threshold)
-
+        self.screening_validation = package.get("screening_validation", {})
         if not self.feature_columns:
             raise ValueError("Model package does not contain feature columns.")
 
@@ -52,7 +66,7 @@ class CryModelService:
             )
 
         if hasattr(self.model, "classes_"):
-            self.classes = [str(label) for label in self.model.classes_]
+            self.classes = validate_class_order(self.model.classes_, self.classes)
 
         print(f"Cry model loaded successfully from {model_file.name}.")
         print("Number of features:", len(self.feature_columns))
@@ -182,21 +196,26 @@ class CryModelService:
         top_label = predicted_class
         top_score = probability_results[top_label]
 
-        is_uncertain = top_score < self.confidence_threshold
-        predicted_label = "uncertain" if is_uncertain else top_label
+        status = determine_prediction_status(
+            top_label, top_score, validation=getattr(self, "screening_validation", {})
+        )
+        predicted_label = top_label if status == "CONFIDENT" else status.lower()
+        score_interpretation = (
+            "Uncalibrated SVC score; not a probability of correctness. "
+            "The saved evaluation does not justify a screening threshold."
+        )
 
         return {
             "predicted_label": predicted_label,
             "top_label": top_label,
-            "confidence": round(float(top_score), 4),
-            "is_uncertain": bool(is_uncertain),
-            "probabilities": probability_results,
+            "prediction_status": status,
+            "possible_category": top_label if status in {"CONFIDENT", "UNCERTAIN"} else None,
+            "model_score": round(float(top_score), 4),
+            "model_score_interpretation": score_interpretation,
+            "class_scores": probability_results,
             "disclaimer": (
                 "Experimental AI output only. "
                 "This is not a medical diagnosis."
             ),
-            "warning": (
-                "The model confidence is low, so this result should be treated as uncertain."
-                if is_uncertain else ""
-            ),
+            "warning": score_interpretation if status != "CONFIDENT" else "Experimental model prediction only; not a confirmed finding.",
         }

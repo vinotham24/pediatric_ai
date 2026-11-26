@@ -1,29 +1,57 @@
-import os
-import numpy as np
-import joblib
+"""Cry category inference using the same production artifact as the API."""
+
+from pathlib import Path
+
 import librosa
-from config import MODELS_DIR, CRY_CLASSES
-from ml.feature_extraction import extract_acoustic_features
+import numpy as np
+
+from services.cry_model_service import CryModelService
+from services.prediction_status import screening_pattern_for
+
+
+# These are the contributor-supplied dataset categories. They are not clinical
+# interpretations or diagnoses.
+CRY_CLASS_DISPLAY = {
+    "belly_pain": "belly_pain (dataset category)",
+    "burping": "burping (dataset category)",
+    "cold_hot": "cold_hot (dataset category)",
+    "discomfort": "discomfort (dataset category)",
+    "hungry": "hungry (dataset category)",
+    "lonely": "lonely (dataset category)",
+    "scared": "scared (dataset category)",
+    "tired": "tired (dataset category)",
+}
+
+
+def map_cry_probabilities(probabilities):
+    """Map scores by class name, never by an assumed numeric class index."""
+    return {
+        CRY_CLASS_DISPLAY.get(str(label), str(label)): float(score)
+        for label, score in probabilities.items()
+    }
+
+
+def candidate_pattern(label, status="UNCERTAIN"):
+    display = CRY_CLASS_DISPLAY.get(str(label))
+    if not display:
+        return screening_pattern_for("UNKNOWN")
+    return screening_pattern_for(status, display)
+
 
 class CryAnalyzer:
-    def __init__(self):
-        self.model_path = os.path.join(MODELS_DIR, "cry_model", "cry_model.joblib")
-        self.model = None
-        self.load_model()
-        
-    def load_model(self):
-        if os.path.exists(self.model_path):
+    def __init__(self, model_service=None):
+        self.model_service = model_service
+        self.model_service_error = False
+        if self.model_service is None:
             try:
-                self.model = joblib.load(self.model_path)
-            except Exception as e:
-                print(f"Warning loading Cry model: {e}")
+                self.model_service = CryModelService()
+            except (FileNotFoundError, ValueError) as exc:
+                print(f"Cry category model unavailable: {exc}")
+                self.model_service_error = True
 
     def analyze(self, y, sr=16000, filename_hint=None):
-        duration = float(len(y) / sr)
-        rms = float(np.mean(librosa.feature.rms(y=y)[0]))
-        fn_lower = str(filename_hint).lower() if filename_hint else ""
-        
-        # Determine intensity
+        duration = float(len(y) / sr) if sr else 0.0
+        rms = float(np.mean(librosa.feature.rms(y=y)[0])) if len(y) else 0.0
         if rms > 0.08:
             intensity = "High"
         elif rms > 0.03:
@@ -31,88 +59,62 @@ class CryAnalyzer:
         else:
             intensity = "Low"
 
-        # Pitch & harmonicity features for abnormality score
         try:
-            f0 = librosa.yin(y, fmin=librosa.note_to_hz('C2'), fmax=librosa.note_to_hz('C7'), sr=sr)
-            f0_clean = f0[~np.isnan(f0)]
-            if len(f0_clean) > 0:
-                pitch_std = float(np.std(f0_clean))
-                pitch_max = float(np.max(f0_clean))
-                pitch_mean = float(np.mean(f0_clean))
-            else:
-                pitch_std, pitch_max, pitch_mean = 0.0, 0.0, 0.0
+            pitch = librosa.yin(y, fmin=80, fmax=1000, sr=sr) if len(y) else np.array([])
+            pitch = pitch[np.isfinite(pitch)]
+            pitch_std = float(np.std(pitch)) if pitch.size else 0.0
+            pitch_max = float(np.max(pitch)) if pitch.size else 0.0
         except Exception:
-            pitch_std, pitch_max, pitch_mean = 0.0, 0.0, 0.0
+            pitch_std, pitch_max = 0.0, 0.0
+        try:
+            flatness = float(np.mean(librosa.feature.spectral_flatness(y=y)[0]))
+        except Exception:
+            flatness = 0.0
+        abnormality_raw = (
+            (pitch_std / 12.0) * 30.0
+            + (flatness * 1200) * 40.0
+            + (rms * 250)
+            + (pitch_max / 500.0) * 15.0
+        )
+        abnormality = min(98, max(12, int(abnormality_raw)))
 
-        spec_flatness = float(np.mean(librosa.feature.spectral_flatness(y=y)[0]))
-        
-        # Calculate Abnormality Score (0-100) dynamically based on pitch instability & spectral entropy
-        abnormality_raw = (pitch_std / 12.0) * 30.0 + (spec_flatness * 1200) * 40.0 + (rms * 250) + (pitch_max / 500.0) * 15.0
-        abnormality_score = min(98, max(12, int(abnormality_raw)))
-
-        probs = {}
-        if self.model is not None:
+        prediction = None
+        prediction_error = False
+        # filename_hint is used only as the source audio path. Its name is never
+        # parsed for a label or included among model features.
+        if self.model_service is not None and filename_hint:
             try:
-                feat = extract_acoustic_features(y, sr).reshape(1, -1)
-                p_arr = self.model.predict_proba(feat)[0]
-                classes = list(self.model.classes_)
-                probs = {cls: round(float(p), 4) for cls, p in zip(classes, p_arr)}
-            except Exception as e:
-                print(f"Error in ML cry inference: {e}")
+                source = Path(filename_hint)
+                if source.is_file():
+                    prediction = self.model_service.predict(source)
+            except Exception as exc:
+                print(f"Cry category inference unavailable: {exc}")
+                prediction_error = True
 
-        if not probs:
-            probs = self._acoustic_heuristic_cry_probs(abnormality_score, pitch_max, pitch_std, rms)
+        if prediction:
+            candidate_class = prediction.get("top_label")
+            candidate = CRY_CLASS_DISPLAY.get(str(candidate_class)) if candidate_class else None
+            status = prediction.get("prediction_status", "UNKNOWN")
+            model_score = prediction.get("model_score")
+        else:
+            status = "ERROR" if prediction_error or self.model_service_error else "UNKNOWN"
+            candidate_class = None
+            candidate = None
+            model_score = None
 
-        probs = self._normalize_cry_probs(probs)
-        top_pattern = max(probs, key=probs.get)
-        confidence = probs[top_pattern]
+        top_pattern = candidate_pattern(candidate_class, status) if candidate_class else screening_pattern_for(status)
 
         return {
             "duration": round(duration, 2),
             "intensity": intensity,
-            "abnormality_score": abnormality_score,
+            "abnormality_score": abnormality,
             "top_pattern": top_pattern,
-            "confidence": round(confidence, 4),
-            "probabilities": probs
-        }
-
-    def _normalize_cry_probs(self, probs):
-        norm_map = {
-            "Pain-associated": "Severe Belly Pain / Colic Cry",
-            "Discomfort-associated": "Physical Irritation Cry",
-            "Burping-associated": "Gas & Burping Discomfort Cry",
-            "Hunger-associated": "Hunger Cry",
-            "Fatigue-associated": "Fatigue & Sleepiness Cry",
-            "Normal/Other": "Normal / Baseline Cry"
-        }
-        normalized = {}
-        for k, v in probs.items():
-            norm_k = norm_map.get(k, k)
-            normalized[norm_k] = v
-        return normalized
-
-    def _acoustic_heuristic_cry_probs(self, abnormality_score, pitch_max, pitch_std, rms):
-        """
-        Dynamic Softmax distribution over cry patterns based on exact acoustic signals.
-        """
-        score_belly = (abnormality_score * 0.05) + (pitch_max / 350.0) + (pitch_std / 10.0)
-        score_abdo = (abnormality_score * 0.04) + (pitch_max / 420.0)
-        score_gas = (abnormality_score * 0.03) + (pitch_std / 20.0)
-        score_hunger = (pitch_std / 12.0) + (rms * 15.0)
-        score_tired = 2.0 - (rms * 15.0) - (pitch_max / 600.0)
-        score_irritation = (pitch_std / 15.0) + (abnormality_score * 0.02)
-        score_normal = 2.0 - (abnormality_score * 0.04)
-
-        scores = np.array([score_belly, score_abdo, score_gas, score_hunger, score_tired, score_irritation, score_normal])
-        exp_s = np.exp(scores - np.max(scores))
-        p = exp_s / np.sum(exp_s)
-
-        return {
-            "Severe Belly Pain / Colic Cry": round(float(p[0]), 4),
-            "Abdominal Distress Cry": round(float(p[1]), 4),
-            "Gas & Burping Discomfort Cry": round(float(p[2]), 4),
-            "Hunger Cry": round(float(p[3]), 4),
-            "Fatigue & Sleepiness Cry": round(float(p[4]), 4),
-            "Physical Irritation Cry": round(float(p[5]), 4),
-            "Normal / Baseline Cry": round(float(p[6]), 4)
+            "candidate_class": candidate_class,
+            "possible_category": candidate,
+            "model_score": model_score,
+            "prediction_status": status,
+            "model_score_interpretation": (
+                prediction.get("model_score_interpretation")
+                if prediction else "Model score unavailable."
+            ),
         }

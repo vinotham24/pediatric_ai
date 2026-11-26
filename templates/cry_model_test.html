@@ -8,9 +8,9 @@
 <div class="card">
     <h2>Experimental Baby Cry Classification</h2>
     <p style="color: var(--text-muted);">
-        Test the existing experimental cry classification model using an audio recording.
-        This is a separate experimental model and does not affect the existing
-        cry/cough screening system.
+        Cry-reason analysis runs only when the supported first-stage detector
+        reliably establishes CRY. Heuristic candidates are not sufficient.
+        If sound type is uncertain, no cry category is produced.
     </p>
 </div>
 
@@ -47,27 +47,17 @@
     <h3 style="color: #0284c7;">Model Prediction</h3>
 
     <div class="stat-box" style="margin: 1rem 0;">
-        <div class="stat-label">PREDICTED CRY CATEGORY</div>
+        <div class="stat-label">POSSIBLE CATEGORY</div>
         <div
             id="predictedCryLabel"
             class="stat-value"
             style="font-size: 1.5rem; color: #0284c7;"
         >-</div>
     </div>
+    <p><strong>Prediction status:</strong> <span id="cryPredictionStatus">UNKNOWN</span></p>
     <p id="cryDecisionNote" style="font-weight: 600; margin-bottom: 0.35rem;"></p>
     <p id="cryConfidence" style="color: var(--text-muted);"></p>
 
-    <h4 style="margin: 1.5rem 0 0.75rem;">
-        Model Scores for Each Category
-    </h4>
-
-    <div id="cryScores"></div>
-
-    <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 1rem;">
-        These are the model's class probabilities, not clinically validated
-        confidence measurements. The model-selected category can differ from
-        the category with the largest probability.
-    </p>
 </div>
 
 <div class="card" style="border-left: 4px solid #f59e0b;">
@@ -127,72 +117,33 @@ cryForm.addEventListener("submit", async function(event) {
             throw new Error("The server did not return a prediction.");
         }
 
-        const isUncertain = Boolean(data.is_uncertain);
-        const selectedClass = data.top_label || prediction;
+        const status = String(data.prediction_status || "UNKNOWN").toUpperCase();
+        const isUncertain = status !== "CONFIDENT";
+        const selectedClass = data.possible_category || data.top_label || "";
         const predictedLabelEl = document.getElementById("predictedCryLabel");
-        if (isUncertain) {
-            predictedLabelEl.textContent = "UNCERTAIN";
-            predictedLabelEl.style.color = "#b45309";
-        } else {
-            predictedLabelEl.textContent = prediction.replaceAll("_", " ").toUpperCase();
-            predictedLabelEl.style.color = "#0284c7";
-        }
-        document.getElementById("cryDecisionNote").textContent = selectedClass
-            ? "Model-selected category: " + selectedClass.replaceAll("_", " ").toUpperCase()
-            : "";
-        const confidence = Number(data.confidence);
-        document.getElementById("cryConfidence").textContent = Number.isFinite(confidence)
-            ? `Probability for the model-selected category: ${(confidence * 100).toFixed(2)}%${isUncertain ? " — result marked uncertain" : ""}`
+        document.getElementById("cryPredictionStatus").textContent = status;
+        predictedLabelEl.textContent = selectedClass
+            ? selectedClass.replaceAll("_", " ").toUpperCase()
+            : "Not available";
+        predictedLabelEl.style.color = isUncertain ? "#b45309" : "#0284c7";
+        document.getElementById("cryDecisionNote").textContent = isUncertain
+            ? "Candidate only; this prediction is uncertain."
+            : "Experimental model prediction; not a confirmed finding.";
+        const score = Number(data.model_score);
+        document.getElementById("cryConfidence").textContent = Number.isFinite(score)
+            ? `Raw model score for candidate: ${(score * 100).toFixed(2)}%. ${data.model_score_interpretation || "Not a probability of correctness."}`
             : (isUncertain ? "Result marked uncertain." : "");
-
-        const scoresContainer = document.getElementById("cryScores");
-        scoresContainer.replaceChildren();
-
-        const probabilities = data.probabilities || {};
-
-        for (const [label, rawScore] of Object.entries(probabilities)) {
-            const score = Number(rawScore);
-            if (!Number.isFinite(score)) continue;
-            const percentage = score <= 1 ? score * 100 : score;
-
-            const row = document.createElement("div");
-            row.style.marginBottom = "1rem";
-
-            const heading = document.createElement("div");
-            heading.style.display = "flex";
-            heading.style.justifyContent = "space-between";
-            heading.style.marginBottom = "0.35rem";
-
-            const name = document.createElement("strong");
-            name.textContent = label.replaceAll("_", " ")
-                + (label === selectedClass ? " (model-selected)" : "");
-
-            const value = document.createElement("span");
-            value.textContent = percentage.toFixed(2) + "%";
-
-            heading.append(name, value);
-
-            const track = document.createElement("div");
-            track.style.background = "#e2e8f0";
-            track.style.height = "10px";
-            track.style.borderRadius = "6px";
-            track.style.overflow = "hidden";
-
-            const bar = document.createElement("div");
-            bar.style.width = Math.max(0, Math.min(100, percentage)) + "%";
-            bar.style.height = "100%";
-            bar.style.background = label === selectedClass ? "#0284c7" : "#94a3b8";
-            bar.style.borderRadius = "6px";
-
-            track.appendChild(bar);
-            row.append(heading, track);
-            scoresContainer.appendChild(row);
-        }
 
         cryResult.style.display = "block";
         cryStatus.textContent = [data.warning, data.disclaimer].filter(Boolean).join(" ") || "Audio analysis completed.";
 
     } catch (error) {
+        document.getElementById("cryPredictionStatus").textContent = "ERROR";
+        document.getElementById("predictedCryLabel").textContent = "Not available";
+        document.getElementById("cryDecisionNote").textContent = "Analysis could not be completed.";
+        document.getElementById("cryConfidence").textContent = "Unavailable";
+        document.getElementById("cryScores").replaceChildren();
+        cryResult.style.display = "block";
         cryStatus.textContent = "Error: " + error.message;
     } finally {
         cryButton.disabled = false;

@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Local Pediatric Cough Annotation</title>
+  <style>
+    :root { color-scheme: light; --ink:#15243b; --muted:#5d6b80; --line:#d8e0ea; --blue:#1967d2; --pale:#f3f7fc; --green:#157347; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:#f7f9fc; color:var(--ink); font:15px/1.45 system-ui,Segoe UI,Arial,sans-serif; }
+    header { padding:20px 28px; background:#10233f; color:white; }
+    header h1 { margin:0 0 4px; font-size:22px; }
+    header p { margin:0; color:#d4deed; }
+    main { max-width:1400px; margin:20px auto; padding:0 18px 36px; }
+    .notice { padding:12px 15px; border:1px solid #d6e4fa; background:#eef5ff; border-radius:9px; margin-bottom:16px; }
+    .stats { display:grid; grid-template-columns:repeat(4,minmax(130px,1fr)); gap:10px; margin-bottom:16px; }
+    .stat, .panel { background:white; border:1px solid var(--line); border-radius:10px; padding:14px; }
+    .stat span { display:block; color:var(--muted); font-size:13px; }
+    .stat strong { font-size:22px; }
+    .layout { display:grid; grid-template-columns:minmax(260px, .8fr) minmax(460px, 1.6fr); gap:14px; }
+    h2 { margin:0 0 12px; font-size:17px; }
+    label { display:block; font-weight:600; margin:11px 0 5px; }
+    input,select,textarea,button { font:inherit; }
+    input,select,textarea { width:100%; border:1px solid #b9c5d4; border-radius:6px; padding:8px 9px; background:#fff; color:var(--ink); }
+    textarea { min-height:78px; resize:vertical; }
+    button { border:0; border-radius:6px; padding:8px 12px; background:var(--blue); color:white; font-weight:650; cursor:pointer; }
+    button.secondary { background:#eaf0f7; color:#24364f; }
+    button:disabled { opacity:.55; cursor:wait; }
+    .row { display:flex; gap:8px; align-items:center; }
+    .row > * { flex:1; }
+    .source-meta,.subtle { color:var(--muted); font-size:13px; }
+    audio { display:block; width:100%; margin:10px 0; }
+    canvas { display:block; width:100%; height:160px; border:1px solid var(--line); border-radius:7px; background:#f9fbfe; touch-action:none; cursor:crosshair; }
+    .annotation { border-top:1px solid var(--line); padding:9px 0; display:grid; grid-template-columns:1fr auto; gap:8px; align-items:center; }
+    .annotation:first-of-type { border-top:0; }
+    .badge { display:inline-block; border-radius:999px; background:#edf2f8; padding:2px 8px; font-size:12px; }
+    .badge.verified { color:#0d633c; background:#e5f5ed; }
+    .badge.rejected { color:#8b2430; background:#fae9eb; }
+    .status { min-height:24px; margin:8px 0; color:var(--green); }
+    .status.error { color:#a12532; }
+    .progress-track { height:8px; background:#e7edf5; border-radius:99px; overflow:hidden; margin-top:7px; }
+    .progress-bar { height:100%; width:0; background:#2b8a5a; }
+    @media (max-width:850px) { .layout { grid-template-columns:1fr; } .stats { grid-template-columns:repeat(2,1fr); } }
+  </style>
+</head>
+<body>
+<header>
+  <h1>Manual pediatric cough annotation</h1>
+  <p>Local tool · West China recordings · source audio is read-only</p>
+</header>
+<main>
+  <div class="notice"><strong>Manual review only.</strong> The waveform is for navigation; it does not classify sound. Listen to the original audio, replay as needed, and label only intervals you have reviewed. Ages are unavailable. The pneumonia/bronchitis group is not a cough-event label.</div>
+  <section class="stats" aria-label="Annotation progress">
+    <div class="stat"><span>Source recordings</span><strong id="total">—</strong></div>
+    <div class="stat"><span>With verified/rejected annotation</span><strong id="reviewed">—</strong></div>
+    <div class="stat"><span>Verified cough events</span><strong id="coughCount">—</strong></div>
+    <div class="stat"><span>Verified non-cough events</span><strong id="nonCoughCount">—</strong></div>
+    <div class="stat"><span>Unknown annotation rows</span><strong id="unknownCount">—</strong></div>
+    <div class="stat"><span>Pending annotation rows</span><strong id="pendingCount">—</strong></div>
+    <div class="stat"><span>Awaiting annotation review</span><strong id="awaiting">—</strong></div>
+    <div class="stat"><span>Progress</span><strong id="percent">0%</strong><div class="progress-track"><div id="progressBar" class="progress-bar"></div></div></div>
+  </section>
+  <div class="layout">
+    <section class="panel">
+      <h2>Recording list</h2>
+      <label for="recording">Select a source recording</label>
+      <select id="recording"></select>
+      <div id="sourceMeta" class="source-meta" style="margin-top:10px"></div>
+      <p class="subtle">Each source file represents one patient per the dataset README. The filename index is retained as a recording ID; individual patient ages are not available.</p>
+      <h2 style="margin-top:22px">Saved intervals</h2>
+      <div id="annotationList" class="subtle">Select a recording to view its annotations.</div>
+    </section>
+    <section class="panel">
+      <h2>Listen and mark an interval</h2>
+      <audio id="player" controls preload="metadata"></audio>
+      <div class="row subtle"><span>Drag across the waveform to set start/end. Or enter times below. Use the audio controls to replay.</span><label style="font-weight:400;margin:0;white-space:nowrap"><input id="loop" type="checkbox" style="width:auto"> Loop audio</label></div>
+      <canvas id="wave" width="1200" height="160" aria-label="Audio waveform selector"></canvas>
+      <div class="row" style="margin-top:6px">
+        <button id="setStart" type="button" class="secondary">Set start to playhead</button>
+        <button id="setEnd" type="button" class="secondary">Set end to playhead</button>
+        <span id="durationText" class="subtle" style="text-align:right">Duration: —</span>
+      </div>
+      <form id="annotationForm">
+        <input type="hidden" id="annotationId">
+        <div class="row">
+          <div><label for="start">Start (seconds)</label><input id="start" type="number" min="0" step="0.001" required></div>
+          <div><label for="end">End (seconds)</label><input id="end" type="number" min="0" step="0.001" required></div>
+        </div>
+        <div class="row">
+          <div><label for="label">Event label</label><select id="label" required><option value="">Choose after listening</option><option>COUGH</option><option>NON_COUGH</option><option>UNKNOWN</option></select></div>
+          <div><label for="verification">Verification status</label><select id="verification"><option>PENDING</option><option>VERIFIED</option><option>REJECTED</option></select></div>
+        </div>
+        <label for="annotator">Annotator</label><input id="annotator" required maxlength="120" autocomplete="name">
+        <label for="notes">Notes</label><textarea id="notes" maxlength="2000" placeholder="Optional context or uncertainty notes"></textarea>
+        <div class="row" style="margin-top:12px"><button id="save" type="submit">Save annotation</button><button id="cancelEdit" type="button" class="secondary" hidden>Cancel edit</button></div>
+      </form>
+      <div id="message" class="status" role="status"></div>
+    </section>
+  </div>
+</main>
+<script>
+const el = id => document.getElementById(id);
+let recordings = [];
+let annotations = [];
+let duration = 0;
+let peaks = [];
+let dragStart = null;
+let selection = null;
+const canvas = el('wave'), ctx = canvas.getContext('2d');
+
+function setMessage(text, error=false) { el('message').textContent=text; el('message').classList.toggle('error',error); }
+function currentId() { return el('recording').value; }
+function timeFromX(x) { return Math.min(duration, Math.max(0, x / canvas.clientWidth * duration)); }
+function drawWave() {
+  const w=canvas.width, h=canvas.height, mid=h/2;
+  ctx.clearRect(0,0,w,h); ctx.fillStyle='#f9fbfe'; ctx.fillRect(0,0,w,h);
+  ctx.strokeStyle='#cbd5e2'; ctx.beginPath(); ctx.moveTo(0,mid); ctx.lineTo(w,mid); ctx.stroke();
+  if (selection && duration>0) { ctx.fillStyle='rgba(25,103,210,.12)'; ctx.fillRect(selection[0]/duration*w,0,(selection[1]-selection[0])/duration*w,h); }
+  if (!peaks.length) return;
+  ctx.strokeStyle='#3973bd'; ctx.lineWidth=1;
+  for (let i=0;i<peaks.length;i++) { const x=i/(peaks.length-1||1)*w, amp=Math.min(1,peaks[i])*h*.44; ctx.beginPath();ctx.moveTo(x,mid-amp);ctx.lineTo(x,mid+amp);ctx.stroke(); }
+}
+function setSelection(a,b) { selection=[Math.max(0,Math.min(a,b)),Math.min(duration,Math.max(a,b))]; el('start').value=selection[0].toFixed(3);el('end').value=selection[1].toFixed(3);drawWave(); }
+canvas.addEventListener('pointerdown',e=>{if(!duration)return;canvas.setPointerCapture(e.pointerId);dragStart=timeFromX(e.offsetX);selection=[dragStart,dragStart];drawWave();});
+canvas.addEventListener('pointerup',e=>{if(dragStart===null)return;const end=timeFromX(e.offsetX);setSelection(dragStart,end);dragStart=null;});
+canvas.addEventListener('pointermove',e=>{if(dragStart===null)return;selection=[Math.min(dragStart,timeFromX(e.offsetX)),Math.max(dragStart,timeFromX(e.offsetX))];drawWave();});
+el('player').addEventListener('timeupdate',()=>{el('player').loop=el('loop').checked;});
+el('loop').addEventListener('change',()=>{el('player').loop=el('loop').checked;});
+el('setStart').onclick=()=>{if(duration)setSelection(el('player').currentTime, Number(el('end').value)||duration);};
+el('setEnd').onclick=()=>{if(duration)setSelection(Number(el('start').value)||0, el('player').currentTime);};
+el('start').addEventListener('input',()=>{const a=Number(el('start').value),b=Number(el('end').value);if(Number.isFinite(a)&&Number.isFinite(b)&&b>=a){selection=[a,b];drawWave();}});
+el('end').addEventListener('input',()=>{const a=Number(el('start').value),b=Number(el('end').value);if(Number.isFinite(a)&&Number.isFinite(b)&&b>=a){selection=[a,b];drawWave();}});
+
+async function refreshProgress() {
+  const r=await fetch('/api/progress'); const p=await r.json();
+  el('total').textContent=p.total_recordings;el('reviewed').textContent=p.reviewed_recordings;
+  el('coughCount').textContent=p.verified_cough_events;el('nonCoughCount').textContent=p.verified_non_cough_events;
+  el('unknownCount').textContent=p.unknown_rows;el('pendingCount').textContent=p.pending_annotation_rows;
+  el('awaiting').textContent=p.awaiting_recordings;el('percent').textContent=`${p.progress_percent.toFixed(1)}%`;
+  el('progressBar').style.width=`${p.progress_percent}%`;
+}
+async function loadAnnotations() {
+  const id=currentId(); if(!id)return;
+  const r=await fetch(`/api/annotations?recording_id=${encodeURIComponent(id)}`);annotations=await r.json();
+  const box=el('annotationList');box.textContent='';
+  if(!annotations.length){box.textContent='No intervals saved for this recording.';return;}
+  for(const a of annotations){
+    const row=document.createElement('div');row.className='annotation';
+    const info=document.createElement('div');
+    const title=document.createElement('strong');title.textContent=`${a.start_time_seconds}s–${a.end_time_seconds}s · ${a.label}`;
+    const detail=document.createElement('div');detail.className='subtle';detail.textContent=`${a.annotator||'No annotator'} · ${a.notes||'No notes'}`;
+    const badge=document.createElement('span');badge.className='badge '+a.verification_status.toLowerCase();badge.textContent=a.verification_status;
+    info.append(title,document.createElement('br'),badge,detail);
+    const edit=document.createElement('button');edit.className='secondary';edit.textContent='Edit';edit.onclick=()=>editAnnotation(a);
+    row.append(info,edit);box.append(row);
+  }
+}
+function editAnnotation(a){
+  el('annotationId').value=a.annotation_id;el('start').value=a.start_time_seconds;el('end').value=a.end_time_seconds;
+  el('label').value=a.label;el('verification').value=a.verification_status;el('annotator').value=a.annotator||'';el('notes').value=a.notes||'';
+  el('save').textContent='Update annotation';el('cancelEdit').hidden=false;selection=[Number(a.start_time_seconds),Number(a.end_time_seconds)];drawWave();setMessage(`Editing ${a.annotation_id}`);
+}
+function resetForm(){el('annotationForm').reset();el('annotationId').value='';el('verification').value='PENDING';el('save').textContent='Save annotation';el('cancelEdit').hidden=true;selection=null;drawWave();}
+el('cancelEdit').onclick=()=>{resetForm();setMessage('Edit cancelled.');};
+async function selectRecording(){
+  const id=currentId(), r=recordings.find(x=>x.recording_id===id);if(!r)return;
+  resetForm();setMessage('');
+  el('sourceMeta').textContent=`${r.source_group} group · ${r.duration_seconds}s · ${r.sample_rate} Hz · ${r.number_of_channels} channel(s) · ${r.original_filename}`;
+  el('player').src=`/audio/${encodeURIComponent(id)}`;el('player').load();el('player').loop=el('loop').checked;
+  const w=await fetch(`/api/waveform/${encodeURIComponent(id)}`);
+  if(!w.ok){peaks=[];duration=Number(r.duration_seconds);setMessage('Waveform unavailable; audio player remains available.',true);drawWave();}
+  else {const data=await w.json();peaks=data.peaks;duration=data.duration_seconds;el('durationText').textContent=`Duration: ${duration.toFixed(3)} s`;drawWave();}
+  await loadAnnotations();
+}
+el('recording').addEventListener('change',selectRecording);
+el('annotationForm').addEventListener('submit',async e=>{
+  e.preventDefault();const payload={annotation_id:el('annotationId').value,recording_id:currentId(),start_time_seconds:el('start').value,end_time_seconds:el('end').value,label:el('label').value,annotator:el('annotator').value.trim(),verification_status:el('verification').value,notes:el('notes').value};
+  el('save').disabled=true;
+  try{const r=await fetch('/api/annotations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const data=await r.json();if(!r.ok)throw new Error(data.error||'Unable to save');resetForm();setMessage('Annotation saved to cough_annotations.csv.');await loadAnnotations();await refreshProgress();}
+  catch(err){setMessage(err.message,true);}finally{el('save').disabled=false;}
+});
+async function init(){
+  const r=await fetch('/api/recordings');recordings=await r.json();const sel=el('recording');
+  for(const x of recordings){const o=document.createElement('option');o.value=x.recording_id;o.textContent=`${x.recording_id} · ${x.source_group} · ${x.duration_seconds}s`;sel.append(o);}
+  await refreshProgress();if(recordings.length)await selectRecording();
+}
+init().catch(e=>setMessage(e.message,true));
+</script>
+</body>
+</html>

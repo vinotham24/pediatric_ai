@@ -15,19 +15,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const resultContainer = document.getElementById('liveResultContainer');
     const liveAudioPlayer = document.getElementById('liveAudioPlayer');
-    const resSoundType = document.getElementById('resSoundType');
-    const resConfidence = document.getElementById('resConfidence');
-    const resPattern = document.getElementById('resPattern');
-    const resRiskBadge = document.getElementById('resRiskBadge');
-
-    const reportDetectionSummary = document.getElementById('reportDetectionSummary');
-    const reportPrecisionMetric = document.getElementById('reportPrecisionMetric');
-    const reportPathophysiology = document.getElementById('reportPathophysiology');
-    const reportAcousticFeatures = document.getElementById('reportAcousticFeatures');
-    const reportTriageGuidance = document.getElementById('reportTriageGuidance');
-    const reportCaregiverChecklist = document.getElementById('reportCaregiverChecklist');
-    const reportRedFlags = document.getElementById('reportRedFlags');
-
     const canvas = document.getElementById('liveFullWaveform');
     const canvasCtx = canvas ? canvas.getContext('2d') : null;
     const micSecurityBanner = document.getElementById('micSecurityBanner');
@@ -228,64 +215,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 const data = await res.json();
 
-                // Render Live Metrics
-                resSoundType.textContent = data.detected_sound;
-                resConfidence.textContent = `${(data.sound_confidence * 100).toFixed(1)}%`;
-                resPattern.textContent = data.top_screening_pattern;
-
-                const rLevel = data.risk_result ? data.risk_result.risk_level : 'LOW';
-                const rScore = data.risk_result ? data.risk_result.risk_score : 20;
-                resRiskBadge.className = `badge badge-${rLevel === 'HIGH' ? 'high' : rLevel === 'MODERATE' ? 'mod' : 'low'}`;
-                resRiskBadge.textContent = `${rLevel} RISK (${rScore}/100)`;
-
-                const aiExp = data.ai_explanation || {};
-
-                if (reportDetectionSummary) {
-                    reportDetectionSummary.innerHTML = aiExp.detection_summary || `Auto-detected <strong>${data.detected_sound}</strong> sound event with ${(data.sound_confidence * 100).toFixed(1)}% accuracy.`;
+                window.renderPredictionResult(data);
+                if (liveAudioPlayer && data.audio_url) {
+                    const previousUrl = liveAudioPlayer.src;
+                    liveAudioPlayer.src = data.audio_url;
+                    if (previousUrl && previousUrl.startsWith('blob:')) URL.revokeObjectURL(previousUrl);
                 }
-
-                if (reportPrecisionMetric) {
-                    reportPrecisionMetric.textContent = aiExp.accuracy_precision_text || `${(data.sound_confidence * 100).toFixed(1)}% Accuracy Score`;
-                }
-
-                if (reportPathophysiology) {
-                    reportPathophysiology.textContent = aiExp.pathophysiology_explanation || 'Airway irritation causing cough or cry sounds.';
-                }
-
-                if (reportAcousticFeatures && aiExp.acoustic_feature_analysis) {
-                    reportAcousticFeatures.innerHTML = aiExp.acoustic_feature_analysis.map(item => `<li>${item}</li>`).join('');
-                }
-
-                if (reportTriageGuidance) {
-                    reportTriageGuidance.textContent = aiExp.triage_guidance || 'Manage at home and observe.';
-                }
-
-                if (reportCaregiverChecklist && aiExp.caregiver_checklist) {
-                    reportCaregiverChecklist.innerHTML = aiExp.caregiver_checklist.map(item => `<li>${item}</li>`).join('');
-                }
-
-                const reportEmergencyAction = document.getElementById('reportEmergencyAction');
-                const reportDoctorNotice = document.getElementById('reportDoctorNotice');
-
-                if (reportRedFlags && aiExp.red_flags) {
-                    reportRedFlags.innerHTML = aiExp.red_flags.map(item => `<li>${item}</li>`).join('');
-                }
-
-                if (reportEmergencyAction && aiExp.emergency_action) {
-                    reportEmergencyAction.textContent = aiExp.emergency_action;
-                }
-
-                if (reportDoctorNotice && aiExp.doctor_contact_notice) {
-                    reportDoctorNotice.textContent = aiExp.doctor_contact_notice;
-                }
-
+                const detailLink = document.getElementById('liveViewFullAnalysis');
+                const pdfLink = document.getElementById('liveDownloadPDF');
+                if (detailLink && data.prediction_id) detailLink.href = `/analysis/${data.prediction_id}`;
+                if (pdfLink && data.prediction_id) pdfLink.href = `/api/report/${data.prediction_id}/pdf`;
                 if (resultContainer) {
                     resultContainer.style.display = 'block';
                     resultContainer.scrollIntoView({ behavior: 'smooth' });
                 }
-
             } catch (err) {
-                alert('Error processing live recording. Please try recording again.');
+                window.renderPredictionResult({ prediction_status: 'ERROR' }, err.message);
+                if (resultContainer) resultContainer.style.display = 'block';
                 console.error(err);
             } finally {
                 btnStart.style.display = 'inline-flex';

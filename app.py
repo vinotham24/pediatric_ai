@@ -24,7 +24,7 @@ from ml.inference import InferencePipeline
 from services.audio_service import AudioService
 from services.ai_assistant import AIAssistantService
 from services.report_service import ReportService
-from services.cry_model_service import CryModelService
+from services.prediction_status import normalize_prediction_record, prediction_metadata
 
 
 # ============================================================
@@ -49,12 +49,6 @@ pipeline_instance = InferencePipeline()
 
 # Stores active WebSocket monitoring sessions.
 live_sessions = {}
-
-# Separate experimental Cry Random Forest model.
-# Load the experimental model on first use so a missing/corrupt model does not
-# prevent the rest of the Flask application from starting.
-cry_model_service = None
-
 
 # ============================================================
 # JSON CONVERSION HELPER
@@ -187,29 +181,27 @@ def analysis_detail(record_id):
     if not pred:
         return redirect(url_for('history'))
 
-    pred_dict = dict(pred)
-
-    if pred_dict.get('probabilities_json'):
-        pred_dict['probabilities'] = json.loads(
-            pred_dict['probabilities_json']
+    pred_dict = normalize_prediction_record(dict(pred))
+    if pred_dict.get("source") in {"UPLOAD", "LIVE"} and pred_dict.get("filename"):
+        pred_dict["audio_url"] = url_for(
+            "serve_recordings", subpath=f"uploads/{pred_dict['filename']}"
         )
-    else:
-        pred_dict['probabilities'] = {}
 
     inference_stub = {
         "detected_sound": pred_dict.get("sound_type"),
-        "sound_confidence": pred_dict.get("confidence", 0.0),
+        "sound_classification": pred_dict.get("sound_classification"),
+        "experimental_sound_candidate": pred_dict.get("experimental_sound_candidate"),
+        "cry_classification_status": pred_dict.get("cry_classification_status"),
+        "cough_classification_status": pred_dict.get("cough_classification_status"),
+        "sound_confidence_is_calibrated": False,
+        "prediction_status": pred_dict.get("prediction_status"),
+        "possible_category": pred_dict.get("possible_category"),
         "top_screening_pattern": pred_dict.get("screening_prediction"),
         "risk_result": {
-            "risk_level": (
-                "HIGH" if pred_dict.get("risk_score", 0) >= 65
-                else "MODERATE" if pred_dict.get("risk_score", 0) >= 35
-                else "LOW"
-            ),
-            "risk_score": pred_dict.get("risk_score", 0),
-            "risk_drivers": [
-                pred_dict.get("screening_prediction")
-            ]
+            "risk_available": False,
+            "risk_level": "NOT CALCULATED",
+            "risk_score": None,
+            "risk_drivers": [],
         }
     }
 
@@ -230,148 +222,96 @@ def analysis_detail(record_id):
 # DO NOT CONFUSE THIS WITH THE SEPARATE CRY MODEL API
 # ============================================================
 
-@app.route('/api/audio/upload', methods=['POST'])
-def api_upload_audio():
-
-    file = None
-
-    for k in ['audio_file', 'audio', 'file']:
-        if k in request.files:
-            file = request.files[k]
-            break
-
-    if not file or file.filename == '':
-        return jsonify({
-            "error": "No valid audio file provided"
-        }), 400
-
-    age_group = request.form.get('age_group', '0-12m')
-    audio_hint = request.form.get('audio_type_hint', 'UNKNOWN')
-
-    symptoms = {
-        "temperature": (
-            float(request.form.get('temperature'))
-            if request.form.get('temperature') else None
-        ),
-        "spo2": (
-            float(request.form.get('spo2'))
-            if request.form.get('spo2') else None
-        ),
-        "fever": request.form.get('fever') == 'yes',
-        "difficulty_breathing": (
-            request.form.get('difficulty_breathing') == 'yes'
-        ),
-        "wheezing": request.form.get('wheezing') == 'yes',
-        "reduced_feeding": (
-            request.form.get('reduced_feeding') == 'yes'
-        ),
-        "lethargy": request.form.get('lethargy') == 'yes',
-        "blue_lips": request.form.get('blue_lips') == 'yes'
-    }
-
+def _persist_analysis_result(result, filename, filepath, source):
+    """Persist upload and live analyses through the same history schema."""
+    conn = get_db_connection()
     try:
-        filename, filepath = audio_service.save_uploaded_file(file)
-
-        # Original unified inference pipeline.
-        pipeline = InferencePipeline()
-
-        result = pipeline.process_audio(
-            filepath,
-            age_group=age_group,
-            audio_type_hint=audio_hint,
-            caregiver_symptoms=symptoms
-        )
-
-        print(
-            f"DEBUG API UPLOAD: filepath={filepath}, "
-            f"detected={result.get('detected_sound')}, "
-            f"conf={result.get('sound_confidence')}, "
-            f"pattern={result.get('top_screening_pattern')}",
-            flush=True
-        )
-
-        # Save to SQLite database.
-        conn = get_db_connection()
         cursor = conn.cursor()
-
         cursor.execute(
-            '''
-            INSERT INTO monitoring_sessions
-            (input_type, risk_level, risk_score)
-            VALUES (?, ?, ?)
-            ''',
-            (
-                'UPLOAD',
-                result['risk_result']['risk_level'],
-                result['risk_result']['risk_score']
-            )
+            '''INSERT INTO monitoring_sessions (input_type, risk_level, risk_score)
+               VALUES (?, ?, ?)''',
+            (source, result["risk_result"]["risk_level"], None),
         )
-
         session_id = cursor.lastrowid
-
-        cursor.execute('''
-            INSERT INTO audio_records
-            (session_id, filename, filepath, audio_type, duration, source)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (
-            session_id,
-            filename,
-            filepath,
-            result['detected_sound'],
-            result['duration'],
-            'UPLOAD'
-        ))
-
+        cursor.execute(
+            '''INSERT INTO audio_records
+               (session_id, filename, filepath, audio_type, duration, source)
+               VALUES (?, ?, ?, ?, ?, ?)''',
+            (session_id, filename, filepath, result["detected_sound"], result["duration"], source),
+        )
         audio_id = cursor.lastrowid
-
-        probs_clean = {
-            str(k): float(v)
-            for k, v in result['screening_probabilities'].items()
-        }
-
-        probs_json = json.dumps(probs_clean)
-
-        cursor.execute('''
-            INSERT INTO predictions
-            (audio_id, sound_type, confidence, screening_prediction,
-             probabilities_json, risk_score)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (
-            audio_id,
-            result['detected_sound'],
-            result['sound_confidence'],
-            result['top_screening_pattern'],
-            probs_json,
-            result['risk_result']['risk_score']
-        ))
-
-        pred_id = cursor.lastrowid
-
+        metadata = json.dumps(prediction_metadata(result))
+        # Legacy schema requires a non-null detector `confidence`; zero is a
+        # storage sentinel only when no score exists. It is stripped from API,
+        # history and reports by normalize_prediction_record.
+        stored_score = result.get("sound_confidence")
+        if stored_score is None:
+            stored_score = 0.0
+        cursor.execute(
+            '''INSERT INTO predictions
+               (audio_id, sound_type, confidence, screening_prediction,
+                probabilities_json, risk_score)
+               VALUES (?, ?, ?, ?, ?, ?)''',
+            (audio_id, result["detected_sound"], stored_score,
+             result["top_screening_pattern"], metadata, None),
+        )
+        prediction_id = cursor.lastrowid
         conn.commit()
+        return prediction_id
+    except Exception:
+        if hasattr(conn, "rollback"):
+            conn.rollback()
+        raise
+    finally:
         conn.close()
 
-        ai_explanation = assistant_service.explain_results(
-            result,
-            age_group=age_group
+
+def _process_audio_request(file_storage, source):
+    filename, filepath = audio_service.save_uploaded_file(file_storage)
+    try:
+        result = InferencePipeline().process_audio(
+            filepath,
+            age_group=request.form.get("age_group", "0-12m"),
+            audio_type_hint=request.form.get("audio_type_hint", "UNKNOWN"),
         )
-
-        result['ai_explanation'] = ai_explanation
-        result['prediction_id'] = pred_id
-        result['audio_url'] = f"/recordings/uploads/{filename}"
-
-        return jsonify(sanitize_for_json(result))
-
-    except Exception as e:
-        err_msg = traceback.format_exc()
-
-        print(
-            f"ERROR IN UPLOAD API: {err_msg}",
-            flush=True
+        prediction_id = _persist_analysis_result(result, filename, filepath, source)
+        result["ai_explanation"] = assistant_service.explain_results(
+            result, age_group=request.form.get("age_group", "0-12m")
         )
+        result["prediction_id"] = prediction_id
+        result["audio_url"] = url_for("serve_recordings", subpath=f"uploads/{filename}")
+        return sanitize_for_json(result)
+    except Exception:
+        audio_service.delete_recording(filepath)
+        raise
 
+
+def _request_audio_file():
+    for key in ("audio_file", "audio", "file"):
+        if key in request.files:
+            candidate = request.files[key]
+            if candidate and candidate.filename:
+                return candidate
+    return None
+
+@app.route('/api/audio/upload', methods=['POST'])
+def api_upload_audio():
+    file = _request_audio_file()
+    if not file or file.filename == '':
         return jsonify({
-            "error": str(e),
-            "trace": err_msg
+            "error": "No valid audio file provided",
+            "prediction_status": "ERROR"
+        }), 400
+
+    try:
+        return jsonify(_process_audio_request(file, "UPLOAD"))
+    except (ValueError, RuntimeError) as exc:
+        return jsonify({"error": f"Unsupported or invalid audio: {exc}", "prediction_status": "ERROR"}), 400
+    except Exception:
+        print(f"ERROR IN UPLOAD API: {traceback.format_exc()}", flush=True)
+        return jsonify({
+            "error": "Audio analysis could not be completed.",
+            "prediction_status": "ERROR"
         }), 500
 
 
@@ -381,59 +321,27 @@ def api_upload_audio():
 
 @app.route('/api/audio/live_analyze', methods=['POST'])
 def api_live_analyze_audio():
-
-    file = None
-
-    for k in ['audio_file', 'audio', 'file']:
-        if k in request.files:
-            file = request.files[k]
-            break
-
+    file = _request_audio_file()
     if not file or file.filename == '':
         return jsonify({
-            "error": "No valid audio file provided"
+            "error": "No valid audio file provided",
+            "prediction_status": "ERROR"
         }), 400
 
-    age_group = request.form.get('age_group', '0-12m')
-    audio_hint = request.form.get('audio_type_hint', 'UNKNOWN')
-
     try:
-        filename, filepath = audio_service.save_uploaded_file(file)
-
-        pipeline = InferencePipeline()
-
-        result = pipeline.process_audio(
-            filepath,
-            age_group=age_group,
-            audio_type_hint=audio_hint
-        )
-
-        ai_explanation = assistant_service.explain_results(
-            result,
-            age_group=age_group
-        )
-
-        result['ai_explanation'] = ai_explanation
-        result['audio_url'] = f"/recordings/uploads/{filename}"
-
-        return jsonify(sanitize_for_json(result))
-
-    except Exception as e:
-        err_msg = traceback.format_exc()
-
-        print(
-            f"ERROR IN LIVE ANALYZE API: {err_msg}",
-            flush=True
-        )
-
+        return jsonify(_process_audio_request(file, "LIVE"))
+    except (ValueError, RuntimeError) as exc:
+        return jsonify({"error": f"Unsupported or invalid audio: {exc}", "prediction_status": "ERROR"}), 400
+    except Exception:
+        print(f"ERROR IN LIVE AUDIO API: {traceback.format_exc()}", flush=True)
         return jsonify({
-            "error": str(e),
-            "trace": err_msg
+            "error": "Live audio analysis could not be completed.",
+            "prediction_status": "ERROR"
         }), 500
 
 
 # ============================================================
-# NEW: SEPARATE CRY MODEL PREDICTION API
+# EXPERIMENTAL CRY ANALYSIS API
 # ============================================================
 
 @app.route('/api/cry-model/test', methods=['POST'])
@@ -451,45 +359,50 @@ def api_test_cry_model():
 
     try:
         source_path, wav_path = audio_service.decode_cry_upload(audio_file)
-
-        global cry_model_service
-        if cry_model_service is None:
-            cry_model_service = CryModelService()
-        prediction = cry_model_service.predict(wav_path)
-
-        predicted_label = prediction.get('predicted_label')
-        probabilities = prediction.get('probabilities', {})
-
-        if predicted_label is None:
-            raise ValueError(
-                "Cry model did not return a predicted label."
-            )
+        result = InferencePipeline().process_audio(wav_path)
+        cry_result = result.get("cry_analysis") or {}
+        candidate_class = cry_result.get("candidate_class")
+        status = result["prediction_status"]
 
         return jsonify({
             "success": True,
-            "predicted_label": predicted_label,
-            "top_label": prediction.get('top_label'),
-            "confidence": prediction.get('confidence'),
-            "is_uncertain": prediction.get('is_uncertain', False),
-            "warning": prediction.get('warning', ''),
-            "probabilities": sanitize_for_json(probabilities),
-            "disclaimer": prediction.get(
-                'disclaimer',
-                "This is an experimental model output, "
-                "not a medical diagnosis."
-            )
+            "audio_analysis_status": result["audio_analysis_status"],
+            "detected_sound": result["detected_sound"],
+            "sound_classification": result["sound_classification"],
+            "experimental_sound_candidate": result["experimental_sound_candidate"],
+            "sound_detection_status": result["sound_detection_status"],
+            "sound_detection_method": result["sound_detection_method"],
+            "prediction_status": status,
+            "predicted_label": candidate_class if status == "CONFIDENT" else status.lower(),
+            "top_label": candidate_class,
+            "possible_category": result["possible_category"],
+            "model_score": result["model_score"],
+            "model_score_interpretation": result["model_score_interpretation"],
+            "cry_classification_status": result["cry_classification_status"],
+            "cough_classification_status": result["cough_classification_status"],
+            "medical_diagnosis": result["medical_diagnosis"],
+            "warning": result["top_screening_pattern"],
+            "class_scores": {},
+            "disclaimer": (
+                "Experimental research output only. This model is not clinically "
+                "validated and does not provide a medical diagnosis."
+            ),
         })
 
-    except ValueError as e:
+    except ValueError as exc:
         print(f"Invalid cry audio upload: {traceback.format_exc()}", flush=True)
         return jsonify({
             "success": False,
-            "error": str(e)
+            "error": str(exc),
+            "prediction_status": "ERROR",
         }), 400
-    except Exception as e:
+    except Exception:
         print(f"ERROR IN CRY MODEL API: {traceback.format_exc()}", flush=True)
-        message = 'Cry model is unavailable.' if cry_model_service is None else 'Audio prediction failed.'
-        return jsonify({"success": False, "error": message}), 503 if cry_model_service is None else 500
+        return jsonify({
+            "success": False,
+            "error": "Audio analysis could not be completed.",
+            "prediction_status": "ERROR",
+        }), 500
 
     finally:
         for temporary_path in (source_path, wav_path):
@@ -553,7 +466,7 @@ def api_analyze_dataset_sample():
         (
             'DATASET',
             result['risk_result']['risk_level'],
-            result['risk_result']['risk_score']
+                None
         )
     )
 
@@ -574,12 +487,7 @@ def api_analyze_dataset_sample():
 
     audio_id = cursor.lastrowid
 
-    probs_clean = {
-        str(k): float(v)
-        for k, v in result['screening_probabilities'].items()
-    }
-
-    probs_json = json.dumps(probs_clean)
+    probs_json = json.dumps(prediction_metadata(result))
 
     cursor.execute('''
         INSERT INTO predictions
@@ -589,10 +497,10 @@ def api_analyze_dataset_sample():
     ''', (
         audio_id,
         result['detected_sound'],
-        result['sound_confidence'],
+        result['sound_confidence'] if result.get('sound_confidence') is not None else 0.0,
         result['top_screening_pattern'],
         probs_json,
-        result['risk_result']['risk_score']
+        None
     ))
 
     pred_id = cursor.lastrowid
@@ -616,7 +524,7 @@ def api_get_history():
 
     rows = conn.execute('''
         SELECT p.id, p.sound_type, p.confidence,
-               p.screening_prediction, p.risk_score, p.created_at,
+               p.screening_prediction, p.risk_score, p.probabilities_json, p.created_at,
                a.filename, a.duration, a.source
         FROM predictions p
         JOIN audio_records a ON p.audio_id = a.id
@@ -629,15 +537,7 @@ def api_get_history():
     history_list = []
 
     for r in rows:
-        item = dict(r)
-
-        item['risk_level'] = (
-            'HIGH' if item['risk_score'] >= 65
-            else 'MODERATE' if item['risk_score'] >= 35
-            else 'LOW'
-        )
-
-        history_list.append(item)
+        history_list.append(normalize_prediction_record(dict(r)))
 
     return jsonify(history_list)
 
@@ -663,24 +563,9 @@ def api_download_pdf(pred_id):
     if not row:
         return "Record not found", 404
 
-    row_dict = dict(row)
+    row_dict = normalize_prediction_record(dict(row))
 
-    row_dict['risk_level'] = (
-        'HIGH' if row_dict['risk_score'] >= 65
-        else 'MODERATE' if row_dict['risk_score'] >= 35
-        else 'LOW'
-    )
-
-    row_dict['probabilities'] = (
-        json.loads(row_dict['probabilities_json'])
-        if row_dict.get('probabilities_json')
-        else {}
-    )
-
-    row_dict['explanation_summary'] = (
-        f"Model classified {row_dict['sound_type']} sound event "
-        f"with primary pattern '{row_dict['screening_prediction']}'."
-    )
+    row_dict['explanation_summary'] = row_dict['experimental_notice']
 
     filename, filepath = report_service.generate_pdf_report(
         row_dict
@@ -704,7 +589,7 @@ def api_download_csv():
 
     rows = conn.execute('''
         SELECT p.id, p.sound_type, p.confidence,
-               p.screening_prediction, p.risk_score, p.created_at,
+               p.screening_prediction, p.risk_score, p.probabilities_json, p.created_at,
                a.filename, a.source
         FROM predictions p
         JOIN audio_records a ON p.audio_id = a.id
@@ -716,17 +601,7 @@ def api_download_csv():
     records = []
 
     for r in rows:
-        d = dict(r)
-
-        d['risk_level'] = (
-            'HIGH' if d['risk_score'] >= 65
-            else 'MODERATE' if d['risk_score'] >= 35
-            else 'LOW'
-        )
-
-        d['top_pattern'] = d['screening_prediction']
-
-        records.append(d)
+        records.append(normalize_prediction_record(dict(r)))
 
     csv_content = report_service.generate_csv_report(records)
 
@@ -746,12 +621,10 @@ def api_download_csv():
 
 @app.route('/recordings/<path:subpath>')
 def serve_recordings(subpath):
-
     import mimetypes
-
-    filepath = os.path.join(RECORDINGS_DIR, subpath)
-
-    if os.path.exists(filepath):
+    recording_root = os.path.realpath(RECORDINGS_DIR)
+    filepath = os.path.realpath(os.path.join(recording_root, subpath))
+    if os.path.commonpath([recording_root, filepath]) == recording_root and os.path.isfile(filepath):
         mime, _ = mimetypes.guess_type(filepath)
 
         return send_file(
@@ -863,10 +736,15 @@ def handle_audio_chunk(data):
             # Emit real-time monitoring update.
             emit('live_detection', {
                 'detected_sound': sed_type,
-                'confidence': result['sound_confidence'],
+                'sound_classification': result.get('sound_classification'),
+                'experimental_sound_candidate': result.get('experimental_sound_candidate'),
+                'prediction_status': result['prediction_status'],
+                'possible_category': result['possible_category'],
+                'cry_classification_status': result.get('cry_classification_status'),
+                'cough_classification_status': result.get('cough_classification_status'),
+                'model_score': result['model_score'],
+                'model_score_interpretation': result['model_score_interpretation'],
                 'top_pattern': result['top_screening_pattern'],
-                'risk_level': result['risk_result']['risk_level'],
-                'risk_score': result['risk_result']['risk_score'],
                 'cry_count': session['cry_count'],
                 'cough_count': session['cough_count'],
                 'resp_count': session['resp_count'],
